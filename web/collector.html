@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Thu dữ liệu thuyền</title>
+  <style>
+    :root { --bg:#111; --panel:#1c1c1c; --line:#333; --text:#eee; --muted:#9a9a9a; --accent:#4a9eff; --ok:#3fbf6f; --warn:#f0b429; --stop:#d64545; --side:380px; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,sans-serif; }
+    body { touch-action:manipulation; -webkit-text-size-adjust:100%; }
+    button, select { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+    button { cursor:pointer; touch-action:manipulation; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+    button:disabled { opacity:.45; }
+    h1 { font-size:17px; margin:0; }
+    .hint, #sdInfo { color:var(--muted); font-size:13px; margin:4px 0; }
+    #sensorInfo { color:var(--text); }
+    #status { margin:6px 0; font-size:14px; min-height:20px; }
+
+    /* Default: one column (phone, portrait tablet). */
+    .layout { display:flex; flex-direction:column; gap:12px; max-width:720px; margin:0 auto;
+      padding:12px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left)); }
+    .stage-col { display:flex; flex-direction:column; gap:6px; min-height:0; }
+    .stage { position:relative; background:#000; border-radius:10px; overflow:hidden; aspect-ratio:4/3; }
+    .info { padding:0 4px; }
+    #cam { width:100%; height:100%; object-fit:contain; display:block; }
+    #badge { position:absolute; left:10px; top:10px; padding:4px 10px; border-radius:14px; font-size:13px; background:rgba(0,0,0,.6); }
+    #badge.rec { background:var(--stop); }
+    .side { display:flex; flex-direction:column; gap:10px; min-height:0; }
+    .scroll { display:flex; flex-direction:column; gap:10px; }
+    .tabs { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .tabs button[aria-pressed="true"] { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; }
+    label { display:flex; flex-direction:column; gap:6px; font-size:14px; }
+    input[type=range] { width:100%; height:28px; }
+    .pad { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; max-width:300px; margin:0 auto 12px; }
+    .pad button { aspect-ratio:1; padding:0; font-size:26px; }
+    .pad button.active { background:var(--accent); border-color:var(--accent); }
+    #beltBtn { font-size:13px !important; }
+    #beltBtn[aria-pressed="true"] { background:var(--warn); border-color:var(--warn); color:#111; }
+    .primary { background:var(--ok); border-color:var(--ok); color:#fff; font-weight:600; }
+    .running { background:var(--warn); border-color:var(--warn); color:#111; font-weight:600; }
+    .wide { width:100%; }
+    #clearFault { display:none; }
+    #allStop { background:var(--stop); border-color:var(--stop); color:#fff; font-weight:700; font-size:17px; padding:16px; }
+    [hidden] { display:none !important; }
+
+    /* Landscape tablet (iPad): camera left at full height, controls right. */
+    @media (orientation: landscape) and (min-width: 820px) {
+      html, body { overflow:hidden; }
+      .layout { display:grid; grid-template-columns:minmax(0, 1fr) var(--side); max-width:none; height:100dvh; margin:0;
+        padding:max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+      .stage-col { height:100%; }
+      .stage { aspect-ratio:auto; flex:1; min-height:0; }
+      .side { height:100%; }
+      .scroll { flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-right:2px; }
+      .pad { max-width:280px; }
+      #allStop { flex:none; }
+    }
+    @media (orientation: landscape) and (min-width: 1150px) { :root { --side:420px; } .pad { max-width:320px; } }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <section class="stage-col">
+    <div class="stage" role="img" aria-label="Camera thuyền">
+      <img id="cam" alt="">
+      <span id="badge">Đang kết nối…</span>
+    </div>
+    <div class="info">
+      <p id="status" role="status" aria-live="polite"></p>
+      <p id="sensorInfo" class="hint"></p>
+      <p id="sdInfo"></p>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="scroll">
+      <h1>Thu dữ liệu thuyền</h1>
+
+      <div class="tabs" role="group" aria-label="Chế độ">
+        <button id="tabManual" aria-pressed="true">Bằng tay</button>
+        <button id="tabAuto" aria-pressed="false">Tự động</button>
+      </div>
+
+      <label>Tốc độ chạy <span id="speedVal">50%</span>
+        <input id="speed" type="range" min="10" max="100" step="5" value="50">
+      </label>
+
+      <section id="manualPanel" class="panel">
+        <div class="pad">
+          <span></span><button data-dir="1" aria-label="Tiến">▲</button><span></span>
+          <button data-dir="3" aria-label="Trái">◀</button><button id="beltBtn" aria-pressed="false">Băng tải</button><button data-dir="4" aria-label="Phải">▶</button>
+          <span></span><button data-dir="2" aria-label="Lùi">▼</button><span></span>
+        </div>
+        <button id="shotBtn" class="primary wide">📷 Chụp ảnh</button>
+        <p class="hint">Giữ nút hướng để chạy, thả ra để dừng. Ảnh lưu vào thẻ SD; không có thẻ thì ảnh tải về máy.</p>
+      </section>
+
+      <section id="autoPanel" class="panel" hidden>
+        <label>Chụp mỗi
+          <select id="interval">
+            <option value="200">0,2 giây</option>
+            <option value="500">0,5 giây</option>
+            <option value="1000" selected>1 giây</option>
+            <option value="2000">2 giây</option>
+            <option value="3000">3 giây</option>
+            <option value="5000">5 giây</option>
+            <option value="10000">10 giây</option>
+          </select>
+        </label>
+        <button id="autoBtn" class="primary wide" style="margin-top:10px">Bắt đầu tự chạy và chụp</button>
+        <p id="autoInfo" class="hint"></p>
+        <p class="hint">Thuyền chạy thẳng 4 giây rồi xoay 1,5 giây, lần lượt sang phải và sang trái. Chỉ chạy khi trang này đang mở; mất kết nối quá 1 giây thì dừng. Đổi tốc độ hay khoảng chụp được ngay khi đang chạy.</p>
+      </section>
+
+      <button id="clearFault" class="wide">Xóa lỗi để chạy lại</button>
+
+      <details>
+        <summary>Cài đặt camera</summary>
+        <label style="margin-top:8px">Độ phân giải ảnh
+          <select id="framesize">
+            <option value="5">QVGA 320×240 (giống ảnh mô hình AI)</option>
+            <option value="8">VGA 640×480</option>
+            <option value="9">SVGA 800×600</option>
+            <option value="10">XGA 1024×768</option>
+          </select>
+        </label>
+      </details>
+    </div>
+    <button id="allStop" class="wide">DỪNG TẤT CẢ</button>
+  </aside>
+</div>
+<script>
+(()=>{
+  const $=id=>document.getElementById(id);
+  const H={'X-Motor-Control':'1'};
+  const post=(url)=>fetch(url,{method:'POST',headers:H,cache:'no-store'});
+  const reasons={link_lost:'Mất kết nối với điện thoại',obstacle:'Siêu âm phát hiện vật phía trước',
+    no_card:'Không có thẻ SD',card_full:'Thẻ SD đầy',write_failed:'Lỗi ghi thẻ SD',open_failed:'Không mở được tệp trên thẻ',
+    mkdir_failed:'Không tạo được thư mục trên thẻ',sd_stopped:'Thẻ SD ngừng ghi',jam:'Kẹt băng tải',bin_full:'Thùng đầy',
+    hardware:'Lỗi phần cứng motor',drive_rejected:'Bộ điều khiển từ chối lệnh',controller_stopped:'Bộ điều khiển đã dừng',
+    auto_running:'Đang tự chạy, hãy dừng trước',outputs_disabled:'Bản firmware không xuất tín hiệu motor',
+    link_timeout:'Mất lệnh quá 1 giây',user_stop:'',none:''};
+  const say=r=>reasons[r]!==undefined?reasons[r]:(r.startsWith('locked:')?'Chưa chạy được: '+r.slice(7).replace(':',' / '):r);
+  let tab='manual',dir=0,belt=0,state=null,autoWanted=false,busy=false;
+
+  // Camera stream on port 81; reconnect if it drops.
+  const cam=$('cam');
+  function startStream(){cam.src=`http://${location.hostname}:81/stream?t=${Date.now()}`;}
+  cam.onerror=()=>setTimeout(startStream,1500);
+  startStream();
+
+  // Speed and capture interval.
+  const speed=$('speed'),interval=$('interval');
+  speed.oninput=()=>{$('speedVal').textContent=speed.value+'%';};
+  speed.onchange=()=>{if(state&&state.mode==='auto')post('/api/auto?action=set&speed='+speed.value);};
+  interval.onchange=()=>{if(state&&state.mode==='auto')post('/api/auto?action=set&interval='+interval.value);};
+
+  // Manual driving: hold to move, release to stop. Commands repeat every 200 ms.
+  async function sendManual(){
+    if(busy)return; busy=true;
+    try{
+      const r=await post(`/api/manual?dir=${dir}&speed=${speed.value}&belt=${belt}`);
+      if(!r.ok){const t=await r.text();$('status').textContent=say(t);if(r.status===409){dir=0;belt=0;markPad();}}
+    }catch(e){$('status').textContent='Mất kết nối';}
+    busy=false;
+  }
+  function markPad(){
+    document.querySelectorAll('[data-dir]').forEach(b=>b.classList.toggle('active',Number(b.dataset.dir)===dir));
+    $('beltBtn').setAttribute('aria-pressed',String(belt===1));
+  }
+  document.querySelectorAll('[data-dir]').forEach(b=>{
+    const go=e=>{e.preventDefault();if(tab!=='manual')return;dir=Number(b.dataset.dir);markPad();busy=false;sendManual();
+      if(b.setPointerCapture&&e.pointerId!==undefined)b.setPointerCapture(e.pointerId);};
+    const release=()=>{if(dir!==Number(b.dataset.dir))return;dir=0;markPad();busy=false;sendManual();};
+    b.addEventListener('pointerdown',go);
+    b.addEventListener('pointerup',release);
+    b.addEventListener('pointercancel',release);
+    b.addEventListener('contextmenu',e=>e.preventDefault());
+  });
+  $('beltBtn').onclick=()=>{belt=belt?0:1;markPad();busy=false;sendManual();};
+  setInterval(()=>{if(tab==='manual'&&(dir||belt))sendManual();},200);
+
+  // Manual shot: to the SD card, or downloaded to the phone without a card.
+  $('shotBtn').onclick=async()=>{
+    const btn=$('shotBtn');btn.disabled=true;
+    try{
+      if(state&&state.sd&&state.sd.mounted){
+        const r=await post('/api/shot');
+        $('status').textContent=r.ok?'Đã chụp, đang lưu vào thẻ':say(await r.text());
+      }else{
+        const r=await fetch(`http://${location.hostname}:82/capture?t=${Date.now()}`,{cache:'no-store'});
+        if(!r.ok)throw new Error('capture');
+        const url=URL.createObjectURL(await r.blob());
+        const a=document.createElement('a');
+        a.href=url;a.download='thuyen_'+new Date().toISOString().replace(/[:.]/g,'-')+'.jpg';
+        document.body.appendChild(a);a.click();a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),5000);
+        $('status').textContent='Đã tải ảnh về điện thoại';
+      }
+    }catch(e){$('status').textContent='Không chụp được ảnh';}
+    setTimeout(()=>{btn.disabled=false;},300);
+  };
+
+  // Auto mode: the page must keep sending heartbeats or the boat stops.
+  $('autoBtn').onclick=async()=>{
+    const btn=$('autoBtn');btn.disabled=true;
+    try{
+      if(state&&state.mode==='auto'){autoWanted=false;await post('/api/auto?action=stop');}
+      else{
+        const r=await post(`/api/auto?action=start&interval=${interval.value}&speed=${speed.value}`);
+        autoWanted=r.ok;
+        if(!r.ok)$('status').textContent=say(await r.text());
+      }
+    }catch(e){$('status').textContent='Mất kết nối';}
+    btn.disabled=false;refresh();
+  };
+  setInterval(()=>{if(autoWanted||(state&&state.mode==='auto'))post('/api/heartbeat').catch(()=>{});},300);
+
+  // Tabs. Leaving a mode stops what that mode was doing.
+  function setTab(next){
+    if(next===tab)return;
+    if(tab==='auto'&&state&&state.mode==='auto'){autoWanted=false;post('/api/auto?action=stop');}
+    if(tab==='manual'&&(dir||belt)){dir=0;belt=0;markPad();busy=false;sendManual();}
+    tab=next;
+    $('tabManual').setAttribute('aria-pressed',String(tab==='manual'));
+    $('tabAuto').setAttribute('aria-pressed',String(tab==='auto'));
+    $('manualPanel').hidden=tab!=='manual';
+    $('autoPanel').hidden=tab!=='auto';
+  }
+  $('tabManual').onclick=()=>setTab('manual');
+  $('tabAuto').onclick=()=>setTab('auto');
+
+  function stopAll(){
+    autoWanted=false;dir=0;belt=0;markPad();
+    fetch('/api/stop',{method:'POST',keepalive:true}).catch(()=>{});
+  }
+  $('allStop').onclick=()=>{stopAll();setTimeout(refresh,200);};
+  $('clearFault').onclick=async()=>{
+    const r=await post('/api/clear').catch(()=>null);
+    $('status').textContent=r&&r.ok?'Đã xóa lỗi':'Chưa xóa được lỗi: kiểm tra vật cản, pin, thùng';
+    refresh();
+  };
+  // Closing or hiding the page must never leave the boat running.
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAll();});
+  window.addEventListener('pagehide',stopAll);
+
+  $('framesize').onchange=async()=>{
+    const r=await post('/api/camera?framesize='+$('framesize').value).catch(()=>null);
+    if(!r||!r.ok)$('status').textContent='Không đổi được độ phân giải';
+  };
+
+  function show(s){
+    state=s;
+    if(s.mode!=='auto')autoWanted=false;
+    const badge=$('badge');
+    const recording=s.sd&&s.sd.recording&&s.mode==='auto';
+    badge.className=recording?'rec':'';
+    badge.textContent=s.mode==='auto'?(s.phase==='turn'?'● TỰ ĐỘNG · xoay':'● TỰ ĐỘNG · thẳng'):s.mode==='manual'?'BẰNG TAY':'Đang dừng';
+    const auto=$('autoBtn');
+    auto.textContent=s.mode==='auto'?'Dừng tự chạy':'Bắt đầu tự chạy và chụp';
+    auto.className=s.mode==='auto'?'running':'primary';
+    let msg='';
+    if(s.state==='FAULT')msg='Lỗi: '+(say(s.reason)||s.reason);
+    else if(s.stopReason&&s.mode==='idle')msg=say(s.stopReason)?'Đã dừng: '+say(s.stopReason):'';
+    const sensors=[];
+    sensors.push(s.obstacleCm>0?`Phía trước: vật cách ${s.obstacleCm.toFixed(0)} cm`:'Phía trước: trống');
+    if(s.binSensor)sensors.push(s.binFull?'THÙNG ĐẦY':s.binCm>0?`Thùng: mặt rác cách cảm biến ${s.binCm.toFixed(0)} cm`:'Thùng: chưa đo được');
+    $('sensorInfo').textContent=sensors.join(' · ');
+    if(!s.cameraReady)msg+=(msg?' · ':'')+'Camera chưa sẵn sàng';
+    if(msg||s.state==='FAULT')$('status').textContent=msg;
+    $('clearFault').style.display=s.state==='FAULT'?'block':'none';
+    const sd=s.sd||{};
+    $('sdInfo').textContent=!sd.mounted?'Thẻ SD: '+(say(sd.error)||'không có thẻ')+' — chụp tay sẽ tải ảnh về điện thoại':
+      `Thẻ SD ${sd.usedMB}/${sd.totalMB} MB`+(sd.folder?` · ${sd.folder}: ${sd.saved} ảnh`:'')+(sd.dropped?` · bỏ ${sd.dropped}`:'')+(sd.error?' · '+say(sd.error):'');
+    $('autoInfo').textContent=s.mode==='auto'?`Đang chạy ${Math.round(s.autoMs/1000)} giây · chụp mỗi ${s.intervalMs/1000} giây · đã lưu ${sd.saved} ảnh`:'';
+    const fs=$('framesize');
+    if([...fs.options].some(o=>o.value===String(s.framesize))&&document.activeElement!==fs)fs.value=String(s.framesize);
+  }
+  async function refresh(){
+    try{const r=await fetch('/api/state',{cache:'no-store'});if(r.ok)show(await r.json());}
+    catch(e){$('badge').textContent='Mất kết nối';}
+  }
+  fetch('/api/state',{cache:'no-store'}).then(r=>r.json()).then(s=>{
+    speed.value=s.speed;$('speedVal').textContent=s.speed+'%';
+    if([...interval.options].some(o=>o.value===String(s.intervalMs)))interval.value=String(s.intervalMs);
+    show(s);
+  }).catch(()=>{});
+  setInterval(refresh,700);
+})();
+</script>
+</body>
+</html>

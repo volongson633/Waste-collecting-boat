@@ -2,6 +2,7 @@
 #include "app_config.h"
 #include "board_config.h"
 #include "vision_service.h"
+#include "sd_recorder.h"
 #include <esp_camera.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
@@ -166,5 +167,46 @@ void WebControl::cameraRoutes() {
         if (!prefs.begin("calib",false)) { server_.send(500,"text/plain","Storage unavailable"); return; }
         const bool saved=prefs.putBytes("pts",points,sizeof(points))==sizeof(points); prefs.end();
         server_.send(saved ? 200 : 500,"text/plain",saved ? "OK" : "Save failed");
+    });
+}
+
+void WebControl::sdRoutes() {
+    server_.on("/sd/status",HTTP_GET,[this]() {
+        const SdStatus s = sd_ ? sd_->status() : SdStatus();
+        StaticJsonDocument<384> doc;
+        doc["available"] = board::sdEnabled && sd_;
+        doc["mounted"] = s.mounted; doc["recording"] = s.recording;
+        doc["intervalMs"] = s.intervalMs; doc["saved"] = s.saved;
+        doc["dropped"] = s.dropped; doc["failures"] = s.failures;
+        doc["totalMB"] = static_cast<uint32_t>(s.totalBytes >> 20);
+        doc["usedMB"] = static_cast<uint32_t>(s.usedBytes >> 20);
+        doc["folder"] = s.folder; doc["error"] = s.error;
+        String json; serializeJson(doc,json);
+        server_.sendHeader("Cache-Control","no-store");
+        server_.send(200,"application/json",json);
+    });
+    // POST /sd/record?action=start&interval=1000  or  ?action=stop
+    server_.on("/sd/record",HTTP_POST,[this]() {
+        if (server_.header("X-Motor-Control")!="1") { server_.send(403,"text/plain","Missing header"); return; }
+        if (!sd_) { server_.send(503,"text/plain","SD unavailable"); return; }
+        const String action=server_.arg("action");
+        if (action=="stop") { sd_->stop(); server_.send(200,"text/plain","OK"); return; }
+        if (action!="start") { server_.send(400,"text/plain","Expected action=start|stop"); return; }
+        uint32_t interval=config::sdDefaultIntervalMs;
+        if (server_.hasArg("interval")) {
+            const String value=server_.arg("interval");
+            char* end=nullptr;
+            const unsigned long n=strtoul(value.c_str(),&end,10);
+            if (!value.length() || *end || n<config::sdMinIntervalMs || n>600000) {
+                server_.send(400,"text/plain","Interval must be 200..600000 ms"); return;
+            }
+            interval=n;
+        }
+        if (!sd_->start(interval)) {
+            const SdStatus s=sd_->status();
+            server_.send(409,"text/plain",s.error[0] ? s.error : (s.recording ? "already_recording" : "not_mounted"));
+            return;
+        }
+        server_.send(200,"text/plain","OK");
     });
 }

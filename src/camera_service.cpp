@@ -2,6 +2,7 @@
 #include "board_config.h"
 #include "app_config.h"
 #include "vision_service.h"
+#include "sd_recorder.h"
 #include <esp_camera.h>
 #include <img_converters.h>
 #include <esp_heap_caps.h>
@@ -166,6 +167,8 @@ void CameraService::task() {
                 }
                 xSemaphoreGive(mutex_);
             }
+            // Copies at most one frame per recording interval; card I/O runs elsewhere.
+            if (recorder_ && fb->format == PIXFORMAT_JPEG) recorder_->offer(fb->buf, fb->len);
             if (vision::available() && fb->width == config::cameraWidth && fb->height == config::cameraHeight &&
                 fmt2rgb888(fb->buf, fb->len, fb->format, bgr_)) {
                 esp_camera_fb_return(fb); fb = nullptr;

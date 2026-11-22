@@ -4,11 +4,13 @@
 #include "web_control.h"
 #include "app_config.h"
 #include "led_control.h"
+#include "sd_recorder.h"
 
 CameraService camera;
 Runtime runtime(camera);
 WebControl web(runtime);
 LedControl leds;
+SdRecorder sd;
 
 // Print only direction/on-off changes, not every PWM ramp step or heartbeat.
 // Keep Serial outside the control task so terminal output cannot delay motors.
@@ -37,6 +39,10 @@ void setup() {
         runtime.command(stop);
         Serial.println("Wi-Fi initialization failed");
     }
+    // After Wi-Fi so a slow or missing card never delays the access point.
+    if (!sd.begin()) Serial.println("SD: recording unavailable");
+    web.attachRecorder(&sd);
+    camera.attachRecorder(&sd);
     if (!camera.begin()) Serial.println("Camera unavailable; inspect ribbon, power and pinout");
     if (controlReady) runtime.enableIdlePatrol();
 }

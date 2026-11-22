@@ -81,6 +81,7 @@
     <p id="hint" class="hint"></p>
     <p id="motorNote" role="status" aria-live="polite">Đang kết nối camera…</p>
     <p id="ultrasonicNote" role="status" aria-live="polite"></p>
+    <p id="sdNote" class="hint" role="status" aria-live="polite"></p>
     <nav class="actions" aria-label="Chức năng">
       <button class="all-stop" id="allStop">DỪNG TẤT CẢ</button>
       <button id="beltOn" aria-pressed="false">Bật băng tải</button>
@@ -88,6 +89,7 @@
       <button id="beltReverse" aria-pressed="false">Đảo băng tải</button>
       <button id="clearMotorFault" type="button">Xóa lỗi motor</button>
       <button id="capture" type="button">Chụp ảnh</button>
+      <button id="sdRecord" type="button" aria-pressed="false" disabled>Ghi thẻ SD</button>
       <button id="calib" type="button">Hiệu chỉnh</button>
       <button id="rewarp" type="button">Nắn ảnh</button>
     </nav>
@@ -109,6 +111,15 @@
       </label>
       <p class="hint">Số chất lượng càng nhỏ, ảnh càng nét nhưng truyền chậm hơn.</p>
       <p id="fps" class="hint"></p>
+      <label>Ghi SD mỗi
+        <select id="sdInterval">
+          <option value="200">0,2 giây</option>
+          <option value="500">0,5 giây</option>
+          <option value="1000" selected>1 giây</option>
+          <option value="2000">2 giây</option>
+          <option value="5000">5 giây</option>
+        </select>
+      </label>
     </details>
     <p id="warpTitle" class="hint"></p><canvas id="warped"></canvas>
   </main>
@@ -487,6 +498,46 @@
     }).catch(() => {
       document.getElementById('beltSpeedHint').textContent = 'Chưa đọc được cấu hình PWM';
     }).finally(restartStream);
+  </script>
+  <script>
+  (()=>{
+    // microSD recording: the board saves stream frames to /cap_NNNN/ on the card.
+    const button=document.getElementById('sdRecord');
+    const note=document.getElementById('sdNote');
+    const interval=document.getElementById('sdInterval');
+    const errors={no_card:'Không thấy thẻ SD',card_full:'Thẻ SD đầy',write_failed:'Lỗi ghi thẻ',
+      open_failed:'Không mở được tệp trên thẻ',mkdir_failed:'Không tạo được thư mục',invalid_pins:'Sai chân SD'};
+    let recording=false,busy=false;
+    function show(s){
+      recording=!!s.recording;
+      button.disabled=!s.mounted||busy;
+      button.textContent=recording?'Dừng ghi SD':'Ghi thẻ SD';
+      button.setAttribute('aria-pressed',String(recording));
+      const error=s.error?(errors[s.error]||s.error):'';
+      if(!s.available){note.textContent='';return;}
+      if(!s.mounted){note.textContent='Thẻ SD: '+(error||'chưa sẵn sàng');return;}
+      const space=`${s.usedMB}/${s.totalMB} MB`;
+      note.textContent=recording
+        ?`Đang ghi ${s.folder}: ${s.saved} ảnh${s.dropped?`, bỏ ${s.dropped}`:''} · ${space}`
+        :`Thẻ SD ${space}`+(s.folder?` · lần ghi cuối ${s.folder}: ${s.saved} ảnh`:'')+(error?` · ${error}`:'');
+    }
+    async function refresh(){
+      if(document.hidden)return;
+      try{const r=await fetch('/sd/status',{cache:'no-store'});if(r.ok)show(await r.json());}catch(e){}
+    }
+    button.onclick=async()=>{
+      busy=true;button.disabled=true;
+      const query=recording?'action=stop':'action=start&interval='+interval.value;
+      try{
+        const r=await fetch('/sd/record?'+query,{method:'POST',headers:{'X-Motor-Control':'1'}});
+        if(!r.ok)note.textContent='Thẻ SD: '+(errors[await r.text()]||'không thực hiện được');
+      }catch(e){note.textContent='Thẻ SD: mất kết nối';}
+      busy=false;
+      refresh();
+    };
+    refresh();
+    setInterval(refresh,2000);
+  })();
   </script>
 </body>
 </html>

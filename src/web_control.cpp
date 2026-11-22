@@ -43,6 +43,7 @@ bool WebControl::begin() {
     });
     server_.on("/motor", HTTP_POST, [this]() { handlePhoneMotor(); });
     cameraRoutes();
+    sdRoutes();
     server_.on("/api/status", HTTP_GET, [this]() { runtime_.operatorPresent(); sendStatus(); });
     server_.on("/api/command", HTTP_POST, [this]() { handleCommand(); });
     server_.on("/api/led", HTTP_POST, [this]() { handleLights(); });

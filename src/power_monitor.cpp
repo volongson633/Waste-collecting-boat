@@ -3,11 +3,17 @@
 #include "app_config.h"
 #include <Arduino.h>
 #include <cmath>
+#include <soc/usb_serial_jtag_reg.h>
+#include <soc/soc.h>
 
 static_assert(board::currentAdc < 0 || config::conveyorJamAmps > 0, "Set a calibrated jam threshold");
 namespace {
 void setupUltrasonic(int trigger, int echo) {
     if (trigger < 0) return;
+    // GPIO19/20 start as the native USB pads (with a D+ pull-up). Release them
+    // to plain GPIO; the board is flashed and monitored over the CH340 port.
+    if (trigger == 19 || trigger == 20 || echo == 19 || echo == 20)
+        CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
     pinMode(trigger, OUTPUT);
     digitalWrite(trigger, LOW);
     pinMode(echo, INPUT);

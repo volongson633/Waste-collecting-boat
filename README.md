@@ -32,13 +32,14 @@ Dự án PlatformIO + Arduino cho ESP32-S3 N16R8 và OV2640. Cấu hình board t
 ## Chức năng đã có trong mã
 
 - Wi-Fi SoftAP và giao diện tiếng Việt trên điện thoại: giữ nút tiến/lùi/trái/phải để lái, thả để dừng lái; nút bật/tắt băng tải, điều khiển LED, trạng thái pin và ảnh camera. Điện thoại kết nối trực tiếp ESP32, không cần router hoặc Internet.
-- Camera QVGA/JPEG, xem ảnh định kỳ và lưu ảnh phục vụ tạo dữ liệu; không sử dụng thẻ SD vì chân SD đang dùng cho driver.
+- Camera QVGA/JPEG, xem ảnh định kỳ và lưu ảnh phục vụ tạo dữ liệu. Ghi ảnh ra thẻ microSD trên board (GPIO38/39/40, SD_MMC 1-bit) để thu dữ liệu cả khi ở ngoài tầm Wi-Fi; xem [đấu nối](doc/DAU_NOI_PHAN_CUNG.md).
 - Hai động cơ có PWM, giới hạn tốc độ, tăng giảm tốc và thời gian chờ khi đảo chiều.
-- Băng tải mặc định bật/tắt toàn tốc theo jumper ENA trong sơ đồ; hỗ trợ PWM nếu đổi dây sang GPIO40.
+- Băng tải bật/tắt toàn tốc theo jumper ENA. Không còn chân trống để chỉnh tốc độ băng tải vì GPIO40 thuộc khe thẻ SD.
+- Hai động cơ đẩy: jumper ENA/ENB cắm sẵn, PWM trên IN1–IN4 (GPIO2, 14, 21, 47). Bắt buộc có điện trở kéo xuống 10 kΩ ở IN1–IN4.
 - Bộ điều khiển chạy riêng mỗi 20 ms. Mất lệnh quá 1 giây, dữ liệu ảnh quá cũ, pin thấp hoặc lỗi sẽ dừng. Phiên lệnh hết hạn không tự được khôi phục bởi gói tin đến muộn.
 - Luồng tự động: tìm → xác nhận mục tiêu qua các khung hình → căn hướng → tiếp cận → thu có thời hạn → dừng. Cần bấm chạy lại cho lượt tiếp theo.
 - Có thể bổ sung cảm biến cửa thu và dòng băng tải qua cấu hình. Mặc định chưa gán GPIO, chưa có chống kẹt bằng dòng khi chưa lắp cảm biến.
-- Điều khiển LED đỏ ngoài GPIO40 và chọn tắt/đỏ/vàng/xanh dương/xanh lá/trắng cho LED RGB WS2812 tích hợp GPIO48. Hai LED đơn vàng/xanh trong sơ đồ gốc không được dùng. LED hoạt động thật cả ở `boat-bench`, độc lập với việc arm motor; lệnh LED không gia hạn thời gian chạy motor.
+- Không còn LED đỏ ngoài (GPIO40 thuộc thẻ SD). Chọn tắt/đỏ/vàng/xanh dương/xanh lá/trắng cho LED RGB WS2812 tích hợp GPIO48. Hai LED đơn vàng/xanh trong sơ đồ gốc không được dùng. LED hoạt động thật cả ở `boat-bench`, độc lập với việc arm motor; lệnh LED không gia hạn thời gian chạy motor.
 - Bộ đếm là chu kỳ thu đã chạy, chưa phải số rác xác nhận vào giỏ.
 
 **Chưa có mô hình AI rác đã huấn luyện hoặc dữ liệu thực nghiệm trên thuyền.** Phần mềm không thay thế các bước lắp ráp, hiệu chuẩn và thử trên nước trong kế hoạch.
@@ -50,6 +51,7 @@ Dự án PlatformIO + Arduino cho ESP32-S3 N16R8 và OV2640. Cấu hình board t
 | `boat-bench` (mặc định) | Mô phỏng, không ghi chân motor | Vật màu đỏ, thuật toán thử đơn giản | Thử camera, giao diện và logic trên bàn; ngắt nguồn động lực |
 | `boat-live` | Thật | Chưa có mô hình | Điều khiển thủ công và thu dữ liệu |
 | `boat-ai` | Thật | Edge Impulse | Chỉ build sau khi thêm thư viện mô hình và `ei_model.h` |
+| `data-collect` | Thật | Không | Firmware riêng để thu dữ liệu: stream camera, lái tay + chụp tay, tự chạy + tự chụp vào thẻ SD |
 | `test-windows` | Không dùng board | Kiểm thử C++ trên Windows | Kiểm tra logic điều khiển |
 | `test-native` | Không dùng board | Kiểm thử C++ | Linux/macOS có g++ |
 
@@ -58,7 +60,7 @@ Dự án PlatformIO + Arduino cho ESP32-S3 N16R8 và OV2640. Cấu hình board t
 ## Build và nạp
 
 1. Mở thư mục dự án trong VS Code có extension PlatformIO. Chọn môi trường `boat-bench`.
-2. Ngắt nguồn motor, nối cáp USB dữ liệu vào cổng nối CH340 trên board. `ARDUINO_USB_CDC_ON_BOOT=0` dùng Serial qua UART này. Không dùng GPIO19/20 làm LED.
+2. Ngắt nguồn motor, nối cáp USB dữ liệu vào cổng nối CH340 trên board. `ARDUINO_USB_CDC_ON_BOOT=0` dùng Serial qua UART này. Không cắm cáp vào cổng USB OTG: GPIO19 là TRIG siêu âm.
 3. Chọn **Build**, sau đó **Upload** và **Monitor** 115200 baud. Nếu cần, chỉ định `upload_port`/`monitor_port` đúng cổng COM trong cấu hình môi trường; chưa có cổng COM cố định trong dự án.
 4. Kết nối điện thoại vào Wi-Fi `ESP32-S3-CAM`, mật khẩu mặc định `12345678`, mở `http://192.168.4.1`.
 5. Bấm **Bật xem ảnh**, đưa một vật đỏ vào khung hình để thử. Chọn thủ công hoặc tự động để xem đầu ra mô phỏng. Không kết luận chiều quay motor từ kết quả mô phỏng.
@@ -87,7 +89,7 @@ Nền tảng khóa ở `espressif32@6.12.0`, Arduino core 2.0.17; Flash QIO 16 M
 
 ## Cấu hình cần hiệu chỉnh
 
-- `include/board_config.h`: GPIO, chiều motor, chân cảm biến và LED; có kiểm tra trùng chân khi build. GPIO48 dành cho WS2812 tích hợp; GPIO38–40 không được dùng đồng thời với SD. Nếu đổi PWM băng tải sang GPIO40, đặt `redLed = -1` và tháo LED đỏ; đặt `rgbLed = -1` nếu board không có WS2812.
+- `include/board_config.h`: GPIO, chiều motor, chân cảm biến và LED; có kiểm tra trùng chân khi build. GPIO48 dành cho WS2812 tích hợp; GPIO38–40 thuộc khe thẻ SD (`sdEnabled`); đặt `rgbLed = -1` nếu board không có WS2812.
 - `include/app_config.h`: camera mirror/flip, hiệu chuẩn ADC, ngưỡng pin, cảm biến dòng. Các ngưỡng 10,2/10,8 V chỉ là điểm bắt đầu cho Li-ion 3S; chốt theo pin thật.
 - `lib/BoatCore/src/boat/Controller.h`: tốc độ, timeout, số khung hình xác nhận và vùng cửa thu `collectY`. Vùng này phải kiểm tra với góc camera cố định, không phải phép đo khoảng cách.
 - Sao chép `include/secrets.example.h` thành `include/secrets.h` để đổi SSID/mật khẩu trước thử nghiệm ngoài phòng.
@@ -104,6 +106,26 @@ python scripts/capture_dataset.py --session ao_sang_01 --count 100 --interval 1 
 ```
 
 Ảnh lưu dưới `data/captures/<session>/`, kèm nhật ký. Chương trình lưu JPEG định kỳ, không quay MP4 và không tự gán nhãn. Chia tập huấn luyện/kiểm tra theo phiên chụp, không chia ngẫu nhiên các khung hình liên tiếp. Xem [hướng dẫn Edge Impulse](doc/EDGE_IMPULSE.md).
+
+## Firmware thu dữ liệu (`data-collect`)
+
+Firmware riêng, dùng chung `platformio.ini`, cấu hình chân và các module camera/motor/thẻ SD; mã nằm trong `src/collector/` và trang điện thoại `web/collector.html`.
+
+```sh
+pio run -e data-collect -t upload
+```
+
+Kết nối Wi-Fi `ESP32-S3-CAM`, mở `http://192.168.4.1`:
+
+- **Bằng tay:** giữ nút ▲▼◀▶ để chạy, thả để dừng; nút **Băng tải** bật/tắt; **Chụp ảnh** lưu một ảnh vào thẻ SD (không có thẻ thì tải ảnh về điện thoại).
+- **Tự động:** chọn **Chụp mỗi** 0,2–10 giây và tốc độ, bấm **Bắt đầu tự chạy và chụp**. Thuyền chạy thẳng 4 giây rồi xoay 1,5 giây, lần lượt phải/trái, và lưu ảnh theo khoảng đã chọn. Đổi tốc độ và khoảng chụp được khi đang chạy. Cần thẻ SD.
+- Tự chạy chỉ hoạt động khi trang đang mở: trang gửi tín hiệu mỗi 300 ms, mất quá 1 giây thì thuyền dừng và ngừng ghi. Ẩn/đóng trang cũng dừng.
+- Siêu âm phát hiện vật, kẹt băng tải hoặc thùng đầy sẽ dừng lượt chạy như firmware chính; bấm **Xóa lỗi để chạy lại**.
+- Mỗi lượt tự chạy tạo thư mục `cap_NNNN` mới; ảnh chụp tay gom vào một thư mục đến khi bắt đầu tự chạy. Cột `trigger` trong `index.csv` ghi `auto` hoặc `manual`.
+- Chọn độ phân giải trong **Cài đặt camera**; QVGA 320×240 trùng với ảnh đầu vào của mô hình AI (`boat-ai`).
+- Không bật chế độ tự chạy khi vắng người (`idlePatrol`) của firmware chính.
+
+Thời gian chạy thẳng/xoay và tốc độ xoay chỉnh trong `include/app_config.h` (`collectorStraightMs`, `collectorTurnMs`, `collectorTurnPercent`).
 
 ## Kiến trúc và giao tiếp
 
@@ -132,7 +154,7 @@ Xem [kế hoạch dự án](doc/KE_HOACH_DU_AN.md). Kiểm thử C++ và build k
 
 ### Cảm biến siêu âm
 
-Với một cảm biến, chọn một vị trí lắp. Hướng về phía trước thì cấu hình `obstacleTrig` và `obstacleEcho`. Hướng xuống thùng thì cấu hình `binTrig` và `binEcho`. Có thể dùng cả hai vị trí khi có hai cảm biến. Điền số GPIO thực tế trong `include/board_config.h` sau khi xác nhận chân còn trống. Cấu hình hiện tại dùng cảm biến phía trước. Nối dây cam VCC vào 5 V, vàng TRIG vào GPIO40, xanh lá ECHO vào GPIO1 qua chia áp (1 kΩ từ ECHO tới GPIO1, 2 kΩ từ GPIO1 xuống GND), và xanh biển GND vào GND chung. Tháo LED đỏ ngoài và mạch chia áp đo pin cũ khỏi GPIO40/GPIO1. Firmware tắt đo điện áp pin và bảo vệ pin thấp dựa trên ADC trong cấu hình này. Với cảm biến có ECHO 5 V, cần hạ mức tín hiệu xuống 3,3 V trước khi nối vào ESP32.
+Với một cảm biến, chọn một vị trí lắp. Hướng về phía trước thì cấu hình `obstacleTrig` và `obstacleEcho`. Hướng xuống thùng thì cấu hình `binTrig` và `binEcho`. Có thể dùng cả hai vị trí khi có hai cảm biến. Điền số GPIO thực tế trong `include/board_config.h` sau khi xác nhận chân còn trống. Cấu hình hiện tại dùng cảm biến phía trước. Nối dây cam VCC vào 5 V, vàng TRIG vào GPIO19 (không cắm cáp cổng USB OTG), xanh lá ECHO vào GPIO1 qua chia áp (1 kΩ từ ECHO tới GPIO1, 2 kΩ từ GPIO1 xuống GND), và xanh biển GND vào GND chung. Tháo mạch chia áp đo pin cũ khỏi GPIO1. Firmware tắt đo điện áp pin và bảo vệ pin thấp dựa trên ADC trong cấu hình này. Với cảm biến có ECHO 5 V, cần hạ mức tín hiệu xuống 3,3 V trước khi nối vào ESP32.
 
 Các ngưỡng khởi điểm trong `include/app_config.h` là 8 cm cho thùng đầy và 45 cm cho vật cản. Đo và hiệu chỉnh theo kích thước thùng, góc đặt cảm biến và khoảng dừng thực tế. Khi cảm biến phía trước phát hiện vật trong một phiên điều khiển đang hoạt động, bánh lái dừng và băng tải chạy tiến khoảng một vòng. `conveyorRevolutionMs` trong `include/app_config.h` đặt thời gian này là 3.000 ms theo số đo của băng tải. Trang Camera thuyền báo khi chu kỳ bắt đầu, kết thúc hoặc dừng sớm. HC-SR04 phát hiện vật phía trước, còn số vòng được ước lượng theo thời gian chạy. Sau đó thuyền dừng, chờ vật rời đi và người dùng xóa lỗi để chạy lại. Nút DỪNG TẤT CẢ, hết hạn lệnh và lỗi kẹt đều có thể ngắt chu kỳ sớm. Nếu cảm biến trong thùng phát hiện thùng đầy thì bộ điều khiển dừng ngay. Mẫu không có echo có thể do ngoài tầm đo, phản xạ kém hoặc mất kết nối.
 

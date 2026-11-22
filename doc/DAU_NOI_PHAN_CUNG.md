@@ -8,20 +8,21 @@ Sơ đồ gốc ghi “L298M”. Phần mềm giả định module L298N thông 
 
 | Chân ESP32-S3 | Chân driver số 1 | Chức năng |
 |---|---|---|
-| GPIO21 | ENA | PWM tốc độ động cơ trái |
-| GPIO2 | IN1 | Chiều động cơ trái |
-| GPIO14 | IN2 | Chiều động cơ trái |
-| GPIO39 | IN3 | Chiều động cơ phải |
-| GPIO47 | IN4 | Chiều động cơ phải |
-| GPIO38 | ENB | PWM tốc độ động cơ phải |
+| (jumper) | ENA | **Cắm jumper**, luôn bật |
+| GPIO2 | IN1 | PWM động cơ trái, chiều tiến |
+| GPIO14 | IN2 | PWM động cơ trái, chiều lùi |
+| GPIO21 | IN3 | PWM động cơ phải, chiều tiến |
+| GPIO47 | IN4 | PWM động cơ phải, chiều lùi |
+| (jumper) | ENB | **Cắm jumper**, luôn bật |
 | GND | GND | Mass chung |
 
 - OUT1/OUT2 → hai dây động cơ trái.
 - OUT3/OUT4 → hai dây động cơ phải.
 - Chân nguồn động lực `12V/VS` → cực dương pin qua cầu chì và công tắc.
-- **Tháo jumper ENA và ENB** để ESP32 điều khiển PWM. Các jumper này khác với `5V-EN`.
+- **Cắm jumper ENA và ENB.** Tốc độ được điều bằng PWM 1 kHz trên chân IN: chạy tiến thì PWM ở IN1 (IN3) và IN2 (IN4) giữ mức thấp, chạy lùi thì ngược lại. Trong mỗi chu kỳ PWM, lúc tắt là hãm động cơ. Các jumper này khác với `5V-EN`.
+- **Bắt buộc lắp điện trở kéo xuống 10 kΩ** từ IN1, IN2, IN3, IN4 xuống GND. Vì EN luôn bật, chân IN thả nổi lúc ESP32 khởi động hoặc reset sẽ làm động cơ quay.
 - GPIO2 cũng nối LED chỉ thị trên board; đèn này có thể sáng/tắt theo IN1, không phải LED báo trạng thái độc lập.
-- GPIO38/39 dùng chung đường thẻ SD: không cắm/sử dụng thẻ SD với cấu hình này.
+- GPIO38, 39 và 40 dành cho khe thẻ microSD trên board (xem mục "Thẻ nhớ microSD"), không nối dây gì khác vào các chân này.
 - Nếu một động cơ chạy ngược, chỉnh `invertLeft` hoặc `invertRight` sau khi thử cơ cấu thực tế.
 
 ## 2. Driver số 2: băng tải
@@ -37,7 +38,25 @@ Sơ đồ gốc ghi “L298M”. Phần mềm giả định module L298N thông 
 - **Giữ jumper ENA** ở cấu hình mặc định `conveyorEnable = -1`: băng tải bật/tắt ở toàn tốc, chưa chỉnh được tốc độ.
 - Kênh B không dùng: OUT3/OUT4 để trống; có thể tháo jumper ENB và kéo ENB xuống GND để tắt kênh.
 
-**Tùy chọn chỉnh tốc độ băng tải:** tháo jumper ENA, nối GPIO40 → ENA, đặt `conveyorEnable = 40` và `redLed = -1`. Khi đó tháo LED đỏ, không nối LED hoặc cảm biến vào GPIO40. Kiểm tra trùng chân khi build sẽ chặn cấu hình dùng chung chân này. Không cần giữ jumper ENB của kênh không dùng.
+Không còn GPIO trống để chỉnh tốc độ băng tải: GPIO40 trước đây dùng cho tùy chọn này nay thuộc khe thẻ SD.
+
+## 2a. Thẻ nhớ microSD (khe trên board)
+
+Khe thẻ nối sẵn trên board, không cần đấu dây. Firmware dùng chế độ SD_MMC 1-bit.
+
+| GPIO | Tín hiệu thẻ |
+|---|---|
+| GPIO39 | CLK |
+| GPIO38 | CMD |
+| GPIO40 | DATA0 |
+
+- Thẻ phải định dạng **FAT32** (hoặc FAT16 với thẻ nhỏ). Core Arduino 2.0.17 tắt exFAT (`FF_FS_EXFAT 0`), nên thẻ SDXC 64 GB trở lên mặc định exFAT phải định dạng lại sang FAT32. Firmware không tự định dạng thẻ.
+- Trên trang camera, chọn khoảng thời gian trong **Cài đặt camera → Ghi SD mỗi** rồi bấm **Ghi thẻ SD**. Ảnh lưu vào `/cap_0001/00000.jpg`, `00001.jpg`…, kèm `index.csv` ghi thời điểm (ms từ lúc khởi động), kích thước và cách chụp (`auto`/`manual`) của từng ảnh. Mỗi lần bấm ghi tạo một thư mục `cap_NNNN` mới.
+- Ảnh có cùng độ phân giải với luồng camera: VGA ở `boat-live`, QVGA 320×240 ở `boat-bench` và `boat-ai`.
+- Ghi thẻ chạy trong tác vụ riêng có hàng đợi 4 ảnh. Thẻ chậm hơn camera thì ảnh thừa bị bỏ và được đếm trong trạng thái, không làm chậm camera, nhận diện hay động cơ.
+- Tự dừng ghi khi thẻ còn dưới 8 MB hoặc ghi lỗi 3 lần liên tiếp.
+- API: `GET /sd/status`; `POST /sd/record?action=start&interval=1000` hoặc `?action=stop`, kèm header `X-Motor-Control: 1`.
+- Thẻ SD hút dòng tăng vọt khi ghi. Nếu board reset khi động cơ và thẻ cùng chạy, thêm tụ lọc gần board và kiểm tra lại nguồn 5 V.
 
 ## 3. LED trong sơ đồ và LED trên board
 
@@ -45,9 +64,9 @@ Sơ đồ gốc ghi “L298M”. Phần mềm giả định module L298N thông 
 
 | LED | Trong sơ đồ gốc | Cách xử lý với cấu hình hiện tại |
 |---|---|---|
-| LED đỏ ngoài | GPIO40 → 220 Ω → LED → GND | `redLed=-1`. GPIO40 dùng cho TRIG của cảm biến siêu âm ở bản `boat-live` |
+| LED đỏ ngoài | GPIO40 → 220 Ω → LED → GND | Không dùng: GPIO40 thuộc khe thẻ SD |
 | LED vàng ngoài | GPIO48 → 220 Ω → LED → GND | Chưa đấu theo hình: GPIO48 đã nối LED RGB WS2812 trên board |
-| LED xanh ngoài | GPIO19 → 220 Ω → LED → GND | Chưa đấu theo hình: GPIO19 là USB D− của cổng USB tích hợp |
+| LED xanh ngoài | GPIO19 → 220 Ω → LED → GND | Không dùng: GPIO19 nay là TRIG của cảm biến siêu âm |
 | LED RGB tích hợp | GPIO48 | Đã điều khiển bằng WS2812/RMT; chọn tắt/đỏ/vàng/xanh dương/xanh lá/trắng trên điện thoại |
 | LED chỉ thị tích hợp | GPIO2 | Dùng chung chân IN1 của driver số 1, không dùng làm báo trạng thái riêng |
 
@@ -57,35 +76,35 @@ vẫn hoạt động khi môi trường LED RGB 4 chân được bật. LED tíc
 
 ### LED RGB rời 4 chân
 
-Chọn môi trường `boat-live-rgb4` trong PlatformIO khi lắp LED rời. Kéo dây cảm biến
-siêu âm vật cản ra khỏi GPIO1 và GPIO40 trước khi gắn LED. Môi trường này tắt cảm
-biến đó và dùng GPIO20 cho màu xanh dương. Khi lắp LED, để cổng USB native của
-ESP32-S3 trống và dùng cổng **UART/CH340** để nạp hoặc xem Serial.
+Không còn hỗ trợ. LED này cần GPIO40 cho màu xanh lá, nay thuộc khe thẻ SD; môi trường `boat-live-rgb4` đã bị bỏ. Nếu bật lại cờ `BOAT_RGB4_ENABLED`, build sẽ báo lỗi.
 
-Ngắt nguồn khi đấu dây. Tra sơ đồ chân theo mã LED hoặc dùng thang diode để xác
-định chân chung và từng màu trước khi nối. Mỗi chân màu dùng một điện trở riêng.
+### Cảm biến siêu âm HC-SR04 phía trước
 
-| Chân LED | Kết nối |
+| Dây | Kết nối |
 |---|---|
-| R (đỏ) | Qua điện trở **330 Ω** đến GPIO1 |
-| G (xanh lá) | Qua điện trở **330 Ω** đến GPIO40 |
-| B (xanh dương) | Qua điện trở **330 Ω** đến GPIO20 |
-| COM (chung) | **GND** nếu chung âm (common cathode), **3V3** nếu chung dương (common anode) |
+| VCC (cam) | 5 V |
+| TRIG (vàng) | **GPIO19** |
+| ECHO (xanh lá) | GPIO1 qua chia áp: 1 kΩ từ ECHO tới GPIO1, 2 kΩ từ GPIO1 xuống GND |
+| GND (xanh biển) | GND chung |
 
-Mặc định mã dùng LED chung âm. Với LED chung dương, bỏ dấu `;` trước dòng
-`-DBOAT_RGB4_COMMON_ANODE=1` trong môi trường `boat-live-rgb4` rồi biên dịch lại.
-Chân COM chung dương dùng **3,3 V**, tránh cấp 5 V hoặc 12 V vào mạch LED này.
+GPIO19 là chân D− của cổng USB **OTG**. Firmware chuyển chân này sang GPIO thường, nên **không cắm cáp vào cổng OTG**; nạp code và xem Serial qua cổng **TTL** (CH340).
 
-Nạp qua cổng UART/CH340 với lệnh sau. Cập nhật `upload_port` trong `platformio.ini`
-nếu cổng COM trên máy khác cấu hình hiện tại.
+### Cảm biến siêu âm HC-SR04 báo thùng đầy
 
-```powershell
-scripts\pio.cmd run -e boat-live-rgb4 -t upload
-```
+Gắn phía trên thùng, đầu dò hướng thẳng xuống mặt rác.
 
-Khi kiểm tra LED lần đầu, ngắt nguồn động lực, mở **Trạng thái · LED** trên trang
-điều khiển và thử từng màu. LED rời hiển thị cùng màu với LED RGB tích hợp.
-Khi quay lại môi trường `boat-live`, tháo LED rời trước khi nối lại cảm biến.
+| Dây | Kết nối |
+|---|---|
+| VCC | 5 V |
+| TRIG | **GPIO20** |
+| ECHO | **GPIO46** qua chia áp: 1 kΩ từ ECHO tới GPIO46, 2 kΩ từ GPIO46 xuống GND |
+| GND | GND chung |
+
+- GPIO20 là chân D+ của cổng USB OTG (cổng này không dùng). GPIO46 là chân strapping: điện trở 2 kΩ của mạch chia áp giữ chân này ở mức thấp lúc khởi động, **không bỏ mạch chia áp**.
+- Thùng đầy khi mặt rác cách cảm biến ≤ 8 cm, hết đầy khi > 12 cm (`binFullCm`, `binClearCm` trong `include/app_config.h`); cần 3 lần đo liên tiếp. HC-SR04 đo được từ khoảng 2 cm.
+- Hai cảm biến đo xen kẽ, mỗi cảm biến khoảng 5 lần/giây. Thùng đầy thì dừng động cơ, băng tải và báo `bin_full`; đổ thùng rồi bấm xóa lỗi để chạy lại.
+- Khoảng cách đo được hiện trên trang `data-collect` để chỉnh ngưỡng theo thùng thật.
+- Sau khi gắn cảm biến này, board không còn GPIO trống.
 
 ## 4. Camera OV2640
 
@@ -139,6 +158,7 @@ GND phải nối chung; dây dòng động cơ quay về điểm phân phối ng
 
 - `intakeSensor = -1`: chưa có chân cảm biến cửa thu.
 - `currentAdc = -1`: chưa có chân đo dòng/chống kẹt bằng dòng.
-- Không dùng GPIO35–37 vì bộ nhớ PSRAM; GPIO19/20 dành cho USB; GPIO43/44 dành cho UART nạp/Serial.
+- Không dùng GPIO35–37 vì bộ nhớ PSRAM; GPIO43/44 dành cho UART nạp/Serial. GPIO19 và GPIO20 dùng cho TRIG của hai cảm biến siêu âm (cổng USB OTG không dùng được); GPIO46 là ECHO cảm biến thùng.
+- Không còn GPIO trống. GPIO0, 3, 45 là chân strapping, không dùng.
 - Không dùng GPIO48 cho LED đơn khi cần giữ LED RGB tích hợp.
 - `boat-bench` không phát tín hiệu điều khiển motor; chạy motor thật bằng `boat-live` sau khi đối chiếu đấu dây và nguồn. Khi thử `boat-bench`, ngắt nguồn động lực vì các chân driver không được điều khiển, có thể thả nổi nếu thiếu điện trở kéo.

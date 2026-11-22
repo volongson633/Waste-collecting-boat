@@ -4,15 +4,36 @@
 #include <driver/gpio.h>
 
 namespace {
+// A bridge is driven one of two ways:
+//  - enable >= 0: PWM on EN, IN1/IN2 select the direction (EN jumper removed).
+//  - enable <  0: EN jumper fitted, PWM on IN1 (forward) or IN2 (reverse); the
+//    other input is held at 0, so the off-time of each PWM period brakes.
+struct Bridge { int enable, in1, in2; unsigned channelA, channelB; bool inverted; };
+
+constexpr Bridge leftBridge{board::leftEnable, board::leftIn1, board::leftIn2,
+    config::leftPwmChannel, config::leftPwmChannelB, board::invertLeft};
+constexpr Bridge rightBridge{board::rightEnable, board::rightIn1, board::rightIn2,
+    config::rightPwmChannel, config::rightPwmChannelB, board::invertRight};
+
+bool attachPwm(int pin, unsigned channel) {
+    digitalWrite(pin, LOW); pinMode(pin, OUTPUT);
+    if (ledcSetup(channel, config::pwmHz, config::pwmBits) == 0) return false;
+    ledcWrite(channel, 0);
+    ledcAttachPin(pin, channel);
+    return true;
+}
 bool setupMotor(int enable, int in1, int in2, unsigned channel) {
     digitalWrite(in1, LOW); digitalWrite(in2, LOW);
     pinMode(in1, OUTPUT); pinMode(in2, OUTPUT);
     if (enable < 0) return true;
-    digitalWrite(enable, LOW); pinMode(enable, OUTPUT);
-    if (ledcSetup(channel, config::pwmHz, config::pwmBits) == 0) return false;
-    ledcWrite(channel, 0);
-    ledcAttachPin(enable, channel);
-    return true;
+    return attachPwm(enable, channel);
+}
+bool setupBridge(const Bridge& b) {
+    if (b.enable >= 0) return setupMotor(b.enable, b.in1, b.in2, b.channelA);
+    // Configure both inputs even if the first fails, so neither is left floating high.
+    const bool a = attachPwm(b.in1, b.channelA);
+    const bool c = attachPwm(b.in2, b.channelB);
+    return a && c;
 }
 void writeMotor(int value, int enable, int in1, int in2, unsigned channel, bool inverted) {
     if (enable >= 0) ledcWrite(channel, 0);
@@ -20,6 +41,15 @@ void writeMotor(int value, int enable, int in1, int in2, unsigned channel, bool 
     digitalWrite(in1, value > 0 ? HIGH : LOW);
     digitalWrite(in2, value < 0 ? HIGH : LOW);
     if (enable >= 0) ledcWrite(channel, abs(value));
+}
+void writeBridge(int value, const Bridge& b) {
+    if (b.enable >= 0) { writeMotor(value, b.enable, b.in1, b.in2, b.channelA, b.inverted); return; }
+    if (b.inverted) value = -value;
+    const uint32_t duty = static_cast<uint32_t>(abs(value));
+    // Lower the inactive input first so IN1 and IN2 are never driven together.
+    if (value > 0) { ledcWrite(b.channelB, 0); ledcWrite(b.channelA, duty); }
+    else if (value < 0) { ledcWrite(b.channelA, 0); ledcWrite(b.channelB, duty); }
+    else { ledcWrite(b.channelA, 0); ledcWrite(b.channelB, 0); }
 }
 bool setupConveyor() {
     if (board::conveyorEnable >= 0) {
@@ -61,8 +91,8 @@ void writeConveyor(int value) {
 bool MotorControl::begin() {
     if (!config::outputsEnabled) { initialized_ = true; return true; }
     // Never short-circuit: configure every bridge to a stopped state even if one fails.
-    bool leftOk = setupMotor(board::leftEnable, board::leftIn1, board::leftIn2, config::leftPwmChannel);
-    bool rightOk = setupMotor(board::rightEnable, board::rightIn1, board::rightIn2, config::rightPwmChannel);
+    bool leftOk = setupBridge(leftBridge);
+    bool rightOk = setupBridge(rightBridge);
     bool conveyorOk = setupConveyor();
     initialized_ = leftOk && rightOk && conveyorOk;
     return initialized_;
@@ -79,8 +109,8 @@ boat::Output MotorControl::apply(const boat::Output& desired, uint32_t now) {
         else if (out.conveyor < 0) out.conveyor = -255;
     }
     if (config::outputsEnabled) {
-        writeMotor(out.left, board::leftEnable, board::leftIn1, board::leftIn2, config::leftPwmChannel, board::invertLeft);
-        writeMotor(out.right, board::rightEnable, board::rightIn1, board::rightIn2, config::rightPwmChannel, board::invertRight);
+        writeBridge(out.left, leftBridge);
+        writeBridge(out.right, rightBridge);
         writeConveyor(out.conveyor);
     }
     return out;

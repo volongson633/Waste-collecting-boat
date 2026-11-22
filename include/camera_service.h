@@ -4,6 +4,8 @@
 #include <esp_http_server.h>
 #include <atomic>
 
+class SdRecorder;
+
 struct CameraStatus {
     bool ready = false;
     bool detectorReady = false;
@@ -15,6 +17,7 @@ class CameraService {
 public:
     bool begin();
     CameraStatus status();
+    void attachRecorder(SdRecorder* recorder) { recorder_ = recorder; }
 private:
     static void taskEntry(void* arg);
     void task();
@@ -29,4 +32,5 @@ private:
     uint32_t jpegAt_ = 0;
     CameraStatus status_;
     std::atomic<bool> initialized_{false};
+    SdRecorder* recorder_ = nullptr;
 };

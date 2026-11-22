@@ -7,6 +7,7 @@
 include/secrets.h
 include/web_page.h
 include/camera_page.h
+include/collector_page.h
 lib/TrashModel/
 data/captures/
 __pycache__/

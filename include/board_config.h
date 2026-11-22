@@ -28,23 +28,31 @@ constexpr int cameraVsync = 6;
 constexpr int cameraHref = 7;
 constexpr int cameraPclk = 13;
 
-constexpr int leftEnable = 21;
-constexpr int leftIn1 = 2;   // Also drives the board's indicator LED.
-constexpr int leftIn2 = 14;
-constexpr int rightEnable = 38; // SD CMD: do not initialize SD.
-constexpr int rightIn1 = 39;    // SD CLK: do not insert/use an SD card.
-constexpr int rightIn2 = 47;
+// Drive bridge (L298N #1): ENA/ENB jumpers fitted, speed is PWM on the IN pins.
+// Fit 10 kOhm pull-downs on IN1..IN4: with EN tied high, a floating IN moves a motor.
+constexpr int leftEnable = -1;  // ENA jumper.
+constexpr int leftIn1 = 2;      // PWM. Also drives the board's indicator LED.
+constexpr int leftIn2 = 14;     // PWM.
+constexpr int rightEnable = -1; // ENB jumper.
+constexpr int rightIn1 = 21;    // PWM (IN3).
+constexpr int rightIn2 = 47;    // PWM (IN4).
+
+// On-board microSD slot, SD_MMC 1-bit mode. These traces are fixed on the board.
+constexpr bool sdEnabled = true;
+constexpr int sdClk = 39;
+constexpr int sdCmd = 38;
+constexpr int sdData0 = 40;
 constexpr int conveyorIn1 = 41;
 constexpr int conveyorIn2 = 42;
-constexpr int conveyorEnable = -1; // Original wiring: ENA jumper, full speed.
-// Optional PWM: set conveyorEnable=40 AND redLed=-1; remove red LED and ENA jumper.
-constexpr int redLed = -1; // GPIO40 is used by the ultrasonic trigger.
+constexpr int conveyorEnable = -1; // ENA jumper, full speed. GPIO40 now belongs to the SD slot.
+constexpr int redLed = -1; // No free GPIO for an external red LED.
 constexpr int rgbLed = 48; // Built-in WS2812; do not connect a discrete LED here.
 constexpr bool rgb4Enabled = BOAT_RGB4_ENABLED != 0;
 constexpr bool rgb4CommonAnode = BOAT_RGB4_COMMON_ANODE != 0;
 constexpr int rgb4Red = rgb4Enabled ? 1 : -1;
 constexpr int rgb4Green = rgb4Enabled ? 40 : -1;
 constexpr int rgb4Blue = rgb4Enabled ? 20 : -1; // Native USB D+; leave that USB port unplugged.
+static_assert(!(rgb4Enabled && sdEnabled), "The four-pin RGB LED needs GPIO40, which the SD slot uses");
 constexpr bool rgbAvailable = rgbLed >= 0 || rgb4Enabled;
 constexpr bool invertLeft = false;
 constexpr bool invertRight = false;
@@ -56,9 +64,13 @@ constexpr bool intakeActiveLow = true;
 constexpr int currentAdc = -1;   // Optional ADC1 input; requires wiring reassignment.
 
 // Assign only after checking which pins are exposed and free on the board.
-constexpr int binTrig = -1;
-constexpr int binEcho = -1;
-constexpr int obstacleTrig = rgb4Enabled ? -1 : 40; // Yellow TRIG wire.
+// Bin-full HC-SR04 looking down into the bin. TRIG on GPIO20 (native USB D+, OTG port
+// unused); ECHO on GPIO46 through the 1k/2k divider, whose 2k to GND also holds this
+// strapping pin low at boot as required.
+constexpr int binTrig = rgb4Enabled ? -1 : 20;
+constexpr int binEcho = rgb4Enabled ? -1 : 46;
+// TRIG uses GPIO19 (native USB D-): keep the OTG USB port unplugged; flash over the TTL port.
+constexpr int obstacleTrig = rgb4Enabled ? -1 : 19; // Yellow TRIG wire.
 constexpr int obstacleEcho = rgb4Enabled ? -1 : 1; // Green ECHO wire through a 5 V to 3.3 V divider.
 static_assert((binTrig < 0) == (binEcho < 0), "Set both bin ultrasonic pins");
 static_assert((obstacleTrig < 0) == (obstacleEcho < 0), "Set both obstacle ultrasonic pins");
@@ -67,8 +79,11 @@ constexpr bool isUsable(int pin) {
     return (pin >= 0 && pin <= 21) || (pin >= 38 && pin <= 48);
 }
 constexpr bool reserved(int pin) {
-    return pin == 0 || pin == 3 || pin == 19 || (pin == 20 && !rgb4Enabled) || pin == 43 ||
-           pin == 44 || pin == 45 || pin == 46 || pin == 48;
+    // GPIO19/20 are the native USB pins and GPIO46 a strapping pin; each is allowed
+    // only for its documented use. GPIO0 (BOOT) and GPIO45 (flash voltage) never.
+    return pin == 0 || pin == 3 || (pin == 19 && obstacleTrig != 19) ||
+           (pin == 20 && !rgb4Enabled && binTrig != 20) || pin == 43 ||
+           pin == 44 || pin == 45 || (pin == 46 && binEcho != 46) || pin == 48;
 }
 constexpr int assigned[] = {
     cameraPwdn, cameraReset, cameraXclk, cameraSiod, cameraSioc,
@@ -76,7 +91,8 @@ constexpr int assigned[] = {
     cameraD7, cameraVsync, cameraHref, cameraPclk, leftEnable, leftIn1,
     leftIn2, rightEnable, rightIn1, rightIn2, conveyorIn1, conveyorIn2,
     conveyorEnable, batteryAdc, intakeSensor, currentAdc, redLed, rgb4Red, rgb4Green, rgb4Blue,
-    binTrig, binEcho, obstacleTrig, obstacleEcho
+    binTrig, binEcho, obstacleTrig, obstacleEcho,
+    sdEnabled ? sdClk : -1, sdEnabled ? sdCmd : -1, sdEnabled ? sdData0 : -1
 };
 template<unsigned N>
 constexpr bool distinctFromLater(const int (&pins)[N], unsigned i, unsigned j) {
