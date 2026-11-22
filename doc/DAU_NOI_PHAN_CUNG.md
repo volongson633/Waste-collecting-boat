@@ -52,7 +52,7 @@ Khe thẻ nối sẵn trên board, không cần đấu dây. Firmware dùng ch�
 
 - Thẻ phải định dạng **FAT32** (hoặc FAT16 với thẻ nhỏ). Core Arduino 2.0.17 tắt exFAT (`FF_FS_EXFAT 0`), nên thẻ SDXC 64 GB trở lên mặc định exFAT phải định dạng lại sang FAT32. Firmware không tự định dạng thẻ.
 - Trên trang camera, chọn khoảng thời gian trong **Cài đặt camera → Ghi SD mỗi** rồi bấm **Ghi thẻ SD**. Ảnh lưu vào `/cap_0001/00000.jpg`, `00001.jpg`…, kèm `index.csv` ghi thời điểm (ms từ lúc khởi động), kích thước và cách chụp (`auto`/`manual`) của từng ảnh. Mỗi lần bấm ghi tạo một thư mục `cap_NNNN` mới.
-- Ảnh có cùng độ phân giải với luồng camera: VGA ở `boat-live`, QVGA 320×240 ở `boat-bench` và `boat-ai`.
+- Ảnh có cùng độ phân giải với luồng camera: VGA ở `boat-live`, QVGA 320×240 ở `boat-ai`; chọn được trong `data-collect`.
 - Ghi thẻ chạy trong tác vụ riêng có hàng đợi 4 ảnh. Thẻ chậm hơn camera thì ảnh thừa bị bỏ và được đếm trong trạng thái, không làm chậm camera, nhận diện hay động cơ.
 - Tự dừng ghi khi thẻ còn dưới 8 MB hoặc ghi lỗi 3 lần liên tiếp.
 - API: `GET /sd/status`; `POST /sd/record?action=start&interval=1000` hoặc `?action=stop`, kèm header `X-Motor-Control: 1`.
@@ -71,8 +71,7 @@ Khe thẻ nối sẵn trên board, không cần đấu dây. Firmware dùng ch�
 | LED chỉ thị tích hợp | GPIO2 | Dùng chung chân IN1 của driver số 1, không dùng làm báo trạng thái riêng |
 
 Đặt `rgbLed=-1` trong `include/board_config.h` để tắt LED tích hợp. Bộ chọn màu
-vẫn hoạt động khi môi trường LED RGB 4 chân được bật. LED tích hợp cũng hoạt động
-ở bản `boat-bench` trong khi motor được mô phỏng.
+vẫn hoạt động khi motor đang dừng.
 
 ### LED RGB rời 4 chân
 
@@ -161,4 +160,4 @@ GND phải nối chung; dây dòng động cơ quay về điểm phân phối ng
 - Không dùng GPIO35–37 vì bộ nhớ PSRAM; GPIO43/44 dành cho UART nạp/Serial. GPIO19 và GPIO20 dùng cho TRIG của hai cảm biến siêu âm (cổng USB OTG không dùng được); GPIO46 là ECHO cảm biến thùng.
 - Không còn GPIO trống. GPIO0, 3, 45 là chân strapping, không dùng.
 - Không dùng GPIO48 cho LED đơn khi cần giữ LED RGB tích hợp.
-- `boat-bench` không phát tín hiệu điều khiển motor; chạy motor thật bằng `boat-live` sau khi đối chiếu đấu dây và nguồn. Khi thử `boat-bench`, ngắt nguồn động lực vì các chân driver không được điều khiển, có thể thả nổi nếu thiếu điện trở kéo.
+- Khi thử trên bàn, ngắt nguồn động cơ hoặc kê thuyền lên; các chân driver phải có điện trở kéo xuống.

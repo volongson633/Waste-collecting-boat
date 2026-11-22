@@ -7,22 +7,21 @@ Dự án chính nằm ở `D:\khkt\code`. Đã nhập giao diện FW-camera làm
 - **/dashboard** giữ trạng thái pin, LED, cấu hình tốc độ và chế độ nhận diện/tự động của dự án lớn. Hai trang có quyền điều khiển riêng; dừng phiên đang chạy trước khi chuyển sang trang còn lại để lái.
 - Stream: **http://192.168.4.1:81/stream**. Chụp ảnh: **http://192.168.4.1/capture** (chuyển sang cổng 82). Chỉ một máy xem stream đồng thời.
 - Vẫn giữ chu trình tự chạy khi không mở trang sau 10 giây. Mở trang sẽ dừng chu trình. `idlePatrolEnabled` trong `include/app_config.h` dùng để bật/tắt tính năng này.
-- Build: `scripts\pio.cmd run -e boat-live`; thử mô phỏng bằng `camera-control` hoặc `boat-bench`. Nạp: `scripts\pio.cmd run -e boat-live -t upload --upload-port COM6`.
+- Build: `pio run -e boat-live`. Nạp: `pio run -e boat-live -t upload --upload-port <cổng>`.
 - Bản sao trước khi ghép: `backups/pre-fw-merge/`. Dự án FW-camera nguồn không bị thay đổi bởi bước ghép này.
 
 # Camera stream và điều khiển thuyền
 
 Khi không có trang điều khiển gửi cập nhật trong 10 giây, ESP tự lặp: tiến 3 giây → lùi 3 giây. Khi mở lại trang, ESP dừng chu trình và chờ điều khiển thủ công. Chỉ kết nối Wi-Fi mà không mở trang vẫn được coi là vắng người điều khiển; đóng trang/khóa màn hình sẽ bắt đầu đếm thời gian vắng. Chu trình này không phát hiện hay tránh vật cản. Bảo vệ pin/kẹt băng tải vẫn có hiệu lực; lỗi phải được xóa thủ công. Sửa `idlePatrolEnabled`, `idlePatrolWaitMs`, `idlePatrolStepMs`, `idlePatrolSpeed` trong `include/app_config.h` để cấu hình. Chế độ này cũng bắt đầu sau khi khởi động xong và chờ đủ 10 giây.
 
-Mặc định hiện tại là `boat-live`: xuất tín hiệu motor thật, yêu cầu đo pin hợp lệ. Chọn `camera-control` để mô phỏng. Serial Monitor 115200 baud in mỗi khi hướng thay đổi, ví dụ `[MOTOR] Đã phát lệnh sang trái`, `[MOTOR] Đã dừng lái` và trạng thái bật/tắt băng tải (hoặc `[MO PHONG]` khi mô phỏng). Log xác nhận tín hiệu điều khiển, không xác nhận chuyển động cơ khí.
+Mặc định hiện tại là `boat-live`: xuất tín hiệu motor thật (chưa đo pin vì GPIO1 dùng cho siêu âm). Serial Monitor 115200 baud in mỗi khi hướng thay đổi, ví dụ `[MOTOR] Đã phát lệnh sang trái`, `[MOTOR] Đã dừng lái` và trạng thái bật/tắt băng tải (hoặc `[MO PHONG]` khi mô phỏng). Log xác nhận tín hiệu điều khiển, không xác nhận chuyển động cơ khí.
 
-Bản `camera-control` chạy camera MJPEG và mô phỏng điều khiển thủ công, không chạy nhận diện. Phần truyền MJPEG tham khảo từ `D:\khkt\FW-camera\FW-camera`; giữ driver và logic điều khiển của dự án hiện tại.
+Bản `boat-live` chạy camera MJPEG và điều khiển thủ công, không chạy nhận diện. Phần truyền MJPEG tham khảo từ `D:\khkt\FW-camera\FW-camera`; giữ driver và logic điều khiển của dự án hiện tại.
 
 - Kết nối Wi-Fi **ESP32-S3-CAM**, mật khẩu **12345678**, mở **http://192.168.4.1**. Stream tự mở cùng các nút điều khiển.
 - Nhấn **Điều khiển thủ công**, giữ **Tiến / Lùi / Trái / Phải** để chạy; thả nút để dừng lái. **Bật băng tải / Tắt băng tải** điều khiển riêng băng chuyền. **DỪNG TẤT CẢ** dừng cả hai.
 - Stream MJPEG: **http://192.168.4.1:81/stream** (một người xem đồng thời). Ảnh JPEG: **http://192.168.4.1:82/capture**. API điều khiển dùng cổng 80 riêng. Trang thử kết nối lại khi luồng báo lỗi.
-- Build: `scripts\pio.cmd run -e camera-control`. Nạp: `scripts\pio.cmd run -e camera-control -t upload --upload-port COM6` (đổi COM theo máy).
-- `camera-control` mô phỏng đầu ra motor. Để chạy motor thật, build/nạp `boat-live`; cấu hình này yêu cầu đo pin hợp lệ. Xem bảng đấu nối bên dưới.
+- Build: `pio run -e boat-live`. Nạp: `pio run -e boat-live -t upload --upload-port <cổng>`. Xem bảng đấu nối bên dưới; khi thử trên bàn, ngắt nguồn động cơ hoặc kê thuyền lên.
 - Stream mặc định VGA 640 × 480; chế độ nhận diện giữ QVGA 320 × 240, chu kỳ lấy ảnh mục tiêu 50 ms khi không chạy nhận diện; tốc độ thực tế phụ thuộc camera và Wi-Fi. Rời trang hoặc mất lệnh quá 1 giây sẽ dừng động cơ và băng tải.
 
 # Thuyền thu gom rác — GOOUUU ESP32-S3 CAM
@@ -39,7 +38,7 @@ Dự án PlatformIO + Arduino cho ESP32-S3 N16R8 và OV2640. Cấu hình board t
 - Bộ điều khiển chạy riêng mỗi 20 ms. Mất lệnh quá 1 giây, dữ liệu ảnh quá cũ, pin thấp hoặc lỗi sẽ dừng. Phiên lệnh hết hạn không tự được khôi phục bởi gói tin đến muộn.
 - Luồng tự động: tìm → xác nhận mục tiêu qua các khung hình → căn hướng → tiếp cận → thu có thời hạn → dừng. Cần bấm chạy lại cho lượt tiếp theo.
 - Có thể bổ sung cảm biến cửa thu và dòng băng tải qua cấu hình. Mặc định chưa gán GPIO, chưa có chống kẹt bằng dòng khi chưa lắp cảm biến.
-- Không còn LED đỏ ngoài (GPIO40 thuộc thẻ SD). Chọn tắt/đỏ/vàng/xanh dương/xanh lá/trắng cho LED RGB WS2812 tích hợp GPIO48. Hai LED đơn vàng/xanh trong sơ đồ gốc không được dùng. LED hoạt động thật cả ở `boat-bench`, độc lập với việc arm motor; lệnh LED không gia hạn thời gian chạy motor.
+- Không còn LED đỏ ngoài (GPIO40 thuộc thẻ SD). Chọn tắt/đỏ/vàng/xanh dương/xanh lá/trắng cho LED RGB WS2812 tích hợp GPIO48. Hai LED đơn vàng/xanh trong sơ đồ gốc không được dùng. LED độc lập với việc arm motor; lệnh LED không gia hạn thời gian chạy motor.
 - Bộ đếm là chu kỳ thu đã chạy, chưa phải số rác xác nhận vào giỏ.
 
 **Chưa có mô hình AI rác đã huấn luyện hoặc dữ liệu thực nghiệm trên thuyền.** Phần mềm không thay thế các bước lắp ráp, hiệu chuẩn và thử trên nước trong kế hoạch.
@@ -48,23 +47,19 @@ Dự án PlatformIO + Arduino cho ESP32-S3 N16R8 và OV2640. Cấu hình board t
 
 | Môi trường | Motor | Nhận diện | Sử dụng |
 |---|---|---|---|
-| `boat-bench` (mặc định) | Mô phỏng, không ghi chân motor | Vật màu đỏ, thuật toán thử đơn giản | Thử camera, giao diện và logic trên bàn; ngắt nguồn động lực |
-| `boat-live` | Thật | Chưa có mô hình | Điều khiển thủ công và thu dữ liệu |
+| `boat-live` (mặc định) | Thật | Chưa có mô hình | Điều khiển thủ công, ghi thẻ SD, trang `/dashboard` |
 | `boat-ai` | Thật | Edge Impulse | Chỉ build sau khi thêm thư viện mô hình và `ei_model.h` |
 | `data-collect` | Thật | Không | Firmware riêng để thu dữ liệu: stream camera, lái tay + chụp tay, tự chạy + tự chụp vào thẻ SD |
-| `test-windows` | Không dùng board | Kiểm thử C++ trên Windows | Kiểm tra logic điều khiển |
-| `test-native` | Không dùng board | Kiểm thử C++ | Linux/macOS có g++ |
 
-`boat-bench` nhận biết tâm các điểm màu đỏ, không phải AI phân biệt rác. Khi có nhiều vật đỏ, tâm có thể nằm giữa các vật. Không dùng kết quả này để đánh giá độ chính xác nhận diện rác.
+Các môi trường thử khác (`camera-control`, `boat-bench`, `conveyor-test`, `test-windows`, `test-native`) đã được bỏ. Mã kiểm thử C++ vẫn nằm trong `test/test_core` nhưng không còn môi trường để chạy.
 
 ## Build và nạp
 
-1. Mở thư mục dự án trong VS Code có extension PlatformIO. Chọn môi trường `boat-bench`.
+1. Mở thư mục dự án trong VS Code có extension PlatformIO. Chọn môi trường `boat-live` (hoặc `data-collect` để thu dữ liệu).
 2. Ngắt nguồn motor, nối cáp USB dữ liệu vào cổng nối CH340 trên board. `ARDUINO_USB_CDC_ON_BOOT=0` dùng Serial qua UART này. Không cắm cáp vào cổng USB OTG: GPIO19 là TRIG siêu âm.
 3. Chọn **Build**, sau đó **Upload** và **Monitor** 115200 baud. Nếu cần, chỉ định `upload_port`/`monitor_port` đúng cổng COM trong cấu hình môi trường; chưa có cổng COM cố định trong dự án.
 4. Kết nối điện thoại vào Wi-Fi `ESP32-S3-CAM`, mật khẩu mặc định `12345678`, mở `http://192.168.4.1`.
-5. Bấm **Bật xem ảnh**, đưa một vật đỏ vào khung hình để thử. Chọn thủ công hoặc tự động để xem đầu ra mô phỏng. Không kết luận chiều quay motor từ kết quả mô phỏng.
-6. Sau khi nguồn, chiều quay, kéo mức lúc boot và bộ chia áp đã kiểm tra, chuyển `boat-live`, Build và Upload. Mạch đo pin phải cho số đọc hợp lệ trước khi được bật chế độ chạy.
+5. Lần đầu chạy motor thật: ngắt nguồn động cơ khi nạp code, kiểm tra điện trở kéo xuống ở IN1–IN4, rồi thử chiều quay khi thuyền đang được kê lên.
 
 Trên điện thoại: chọn **Điều khiển thủ công**, giữ **Tiến/Lùi/Trái/Phải** để lái; dùng hai thanh tốc độ bên trái camera. Thanh bánh lái đặt mức từ 0 đến 100% của giới hạn lái trong firmware. Thanh băng chuyền điều chỉnh PWM khi chân ENA nối với GPIO PWM. Với jumper ENA, băng chuyền chạy toàn tốc khi bật và thanh tốc độ bị khóa. Nhấn **Bật băng tải** một lần để chạy và **Tắt băng tải** để dừng; băng tải không tắt chỉ vì thả nút lái. Nút **DỪNG TẤT CẢ** tắt motor, băng tải và LED. Rời trang, khóa màn hình hoặc mất lệnh quá 1 giây sẽ dừng phần động lực; phiên chạy không tự tiếp tục khi kết nối trở lại.
 
@@ -73,17 +68,15 @@ Khối **Điều khiển LED** dùng được khi motor đang dừng, kể cả 
 Lệnh trong PlatformIO terminal:
 
 ```sh
-pio run -e boat-bench
-pio run -e boat-bench -t upload
-pio device monitor -b 115200
 pio run -e boat-live
-pio test -e test-windows
-scripts\pio.cmd device monitor -e camera-control -p COM6
+pio run -e boat-live -t upload --upload-port /dev/cu.usbserial-110
+pio run -e data-collect -t upload --upload-port /dev/cu.usbserial-110
+pio device monitor -p /dev/cu.usbserial-110 -b 115200
 ```
 
-Đổi `COM6` thành cổng COM của board. Lệnh monitor sẽ hiện log motor trong terminal; nếu đang chạy firmware `boat-live`, đổi `-e camera-control` thành `-e boat-live`.
+Đổi cổng theo máy: macOS dạng `/dev/cu.usbserial-*`, Windows dạng `COM6`. Lệnh monitor hiện log motor trong terminal.
 
-Máy hiện tại có bộ công cụ cục bộ trong `.tools`/`.pio-core` (không đưa vào git). Có thể dùng `scripts\pio.cmd run -e boat-bench` và `scripts\pio.cmd test -e test-windows` từ thư mục gốc nếu lệnh `pio` chưa có trên PATH. File `pio.cmd` dùng được cả khi PowerShell chặn chạy `.ps1`. Script này dùng `.pio/verified-build` và `.pio/verified-libdeps` riêng để tránh đụng thư mục build khi extension IDE đang thao tác; các lệnh `pio` thông thường vẫn dùng `.pio/build`.
+Máy hiện tại có bộ công cụ cục bộ trong `.tools`/`.pio-core` (không đưa vào git). Trên Windows có thể dùng `scripts\pio.cmd run -e boat-live` từ thư mục gốc nếu lệnh `pio` chưa có trên PATH. File `pio.cmd` dùng được cả khi PowerShell chặn chạy `.ps1`. Script này dùng `.pio/verified-build` và `.pio/verified-libdeps` riêng để tránh đụng thư mục build khi extension IDE đang thao tác; các lệnh `pio` thông thường vẫn dùng `.pio/build`.
 
 Nền tảng khóa ở `espressif32@6.12.0`, Arduino core 2.0.17; Flash QIO 16 MB, PSRAM OPI 8 MB. Không tự nâng sang Arduino 3.x vì API PWM khác. Partition có hai vùng ứng dụng 6 MB nhưng firmware chưa triển khai cập nhật OTA.
 
