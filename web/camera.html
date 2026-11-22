@@ -1,0 +1,492 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17191c">
+  <title>Điều khiển camera ESP32</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, sans-serif; background: #f3f4f6; color: #24262a; }
+    .topbar { height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; background: #fff; border-bottom: 1px solid #e6e7e9; }
+    .topbar a { color: #555b63; text-decoration: none; font-size: 14px; }
+    .topbar strong { font-size: 16px; }
+    main { max-width: 1180px; margin: 0 auto; padding: 12px 12px 28px; }
+    .video-card { position: relative; overflow: hidden; background: #111; border-radius: 12px; }
+    #view { position: relative; display: block; width: 100%; }
+    #cam { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: #090a0b; }
+    #marks { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .live { position: absolute; top: 10px; left: 10px; padding: 5px 8px; border-radius: 5px; background: #111b; color: #fff; font-size: 11px; letter-spacing: .06em; }
+    .cockpit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1.15fr); gap: clamp(4px, 1.4vw, 18px); align-items: center; }
+    .speed-panel { display: grid; gap: 14px; padding: clamp(4px, 1.4vw, 16px); background: #fff; border-radius: 12px; }
+    .speed-panel label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 6px; font-size: clamp(10px, 1.6vw, 15px); font-weight: 600; }
+    .speed-panel input { display: block; width: 100%; margin: 4px 0 0; accent-color: #c45120; }
+    .speed-panel output { font-variant-numeric: tabular-nums; }
+    .speed-panel small { display: block; color: #555b63; font-size: clamp(9px, 1.4vw, 12px); }
+    button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+    #ultrasonicNote { color: #93411d; font-size: 13px; text-align: center; }
+    #ultrasonicNote:empty { display: none; }
+    #motorNote { min-height: 20px; color: #555b63; font-size: 12px; text-align: center; }
+    .pad { aspect-ratio: 1; display: grid; grid-template: repeat(3, 1fr) / repeat(3, minmax(0, 1fr)); align-items: stretch; border-radius: 12px; background: #fff; }
+    .pad button { min-width: 0; min-height: 29px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #555b63; font-size: clamp(13px, 2vw, 22px); }
+    .pad button:active { background: #e5e5e7; }
+    .pad .up { grid-area: 1 / 2; }
+    .pad .left { grid-area: 2 / 1; }
+    .pad .center { grid-area: 2 / 2; background: #e26936; color: white; font-size: clamp(8px, 1.2vw, 14px); font-weight: 700; }
+    .pad .right { grid-area: 2 / 3; }
+    .pad .down { grid-area: 3 / 2; }
+    .actions { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; }
+    .actions button { flex: 1 0 auto; min-height: 44px; padding: 0 12px; border: 1px solid #dedfe2; border-radius: 8px; background: #fff; color: #454950; font-size: 13px; white-space: nowrap; }
+    .actions button[aria-pressed=true] { border-color: #c45120; color: #a73d11; background: #fff5f0; }
+    .actions .all-stop { background: #a42d35; border-color: #a42d35; color: #fff; font-weight: 700; }
+    #hint:empty { display: none; }
+    .hint, #hint { color: #858991; font-size: 12px; }
+    .settings { margin-top: 14px; padding: 12px; background: #fff; border-radius: 10px; font-size: 13px; }
+    .settings summary { cursor: pointer; font-weight: 600; }
+    .settings label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+    select { padding: 7px; border: 1px solid #d5d7da; border-radius: 6px; background: #fff; }
+    .settings input[type=range] { width: 140px; }
+    .settings button { padding: 8px 10px; border: 1px solid #d5d7da; border-radius: 6px; background: #fff; color: #454950; }
+    #warped { display: none; width: 100%; margin: 8px 0 16px; background: #000; }
+    @media (min-width: 700px) { main { padding-top: 22px; } }
+  </style>
+</head>
+<body>
+  <header class="topbar"><a href="/dashboard" aria-label="Quay lại">‹</a><strong>Camera thuyền</strong><a href="/dashboard">Trạng thái · LED</a></header>
+  <main>
+    <div class="cockpit">
+      <section class="speed-panel" aria-label="Điều chỉnh tốc độ">
+        <div>
+          <label for="driveSpeed">Bánh lái <output id="driveSpeedValue" for="driveSpeed">100%</output></label>
+          <input id="driveSpeed" type="range" min="0" max="100" value="100">
+        </div>
+        <div>
+          <label for="beltSpeed">Băng chuyền <output id="beltSpeedValue" for="beltSpeed">100%</output></label>
+          <input id="beltSpeed" type="range" min="0" max="100" value="100" aria-describedby="beltSpeedHint" disabled>
+          <small id="beltSpeedHint">Đang kiểm tra PWM…</small>
+        </div>
+      </section>
+      <section class="video-card" aria-label="Hình ảnh camera trực tiếp">
+        <div id="view"><img id="cam" alt="Hình ảnh trực tiếp từ camera"><canvas id="marks"></canvas><span class="live">LIVE · ESP32</span></div>
+      </section>
+      <section class="pad" aria-label="Điều khiển hướng, giữ nút để chạy">
+        <button class="up" data-move="1" aria-label="Tiến" title="Tiến">▲</button>
+        <button class="left" data-move="3" aria-label="Sang trái" title="Sang trái">◀</button>
+        <button class="center" id="driveStop" aria-label="Dừng lái" title="Dừng lái">STOP</button>
+        <button class="right" data-move="4" aria-label="Sang phải" title="Sang phải">▶</button>
+        <button class="down" data-move="2" aria-label="Lùi" title="Lùi">▼</button>
+      </section>
+    </div>
+    <p id="hint" class="hint"></p>
+    <p id="motorNote" role="status" aria-live="polite">Đang kết nối camera…</p>
+    <p id="ultrasonicNote" role="status" aria-live="polite"></p>
+    <nav class="actions" aria-label="Chức năng">
+      <button class="all-stop" id="allStop">DỪNG TẤT CẢ</button>
+      <button id="beltOn" aria-pressed="false">Bật băng tải</button>
+      <button id="beltOff">Tắt băng tải</button>
+      <button id="beltReverse" aria-pressed="false">Đảo băng tải</button>
+      <button id="clearMotorFault" type="button">Xóa lỗi motor</button>
+      <button id="capture" type="button">Chụp ảnh</button>
+      <button id="calib" type="button">Hiệu chỉnh</button>
+      <button id="rewarp" type="button">Nắn ảnh</button>
+    </nav>
+    <details class="settings">
+      <summary>Cài đặt camera</summary>
+      <label>Độ phân giải
+        <select id="framesize">
+          <option value="5">QVGA 320×240</option>
+          <option value="8">VGA 640×480</option>
+          <option value="9">SVGA 800×600</option>
+          <option value="10">XGA 1024×768</option>
+          <option value="11">HD 1280×720</option>
+          <option value="12">SXGA 1280×1024</option>
+          <option value="13">UXGA 1600×1200</option>
+        </select>
+      </label>
+      <label>Chất lượng JPEG <span id="qval">12</span>
+        <input id="quality" type="range" min="4" max="63" value="12">
+      </label>
+      <p class="hint">Số chất lượng càng nhỏ, ảnh càng nét nhưng truyền chậm hơn.</p>
+      <p id="fps" class="hint"></p>
+    </details>
+    <p id="warpTitle" class="hint"></p><canvas id="warped"></canvas>
+  </main>
+  <script>
+  (()=>{
+    let direction=0,belt=0,busy=false,clearing=false,lastError='';
+    let intentRevision=0,stopPending=false;
+    const note=document.getElementById('motorNote');
+    const ultrasonicNote=document.getElementById('ultrasonicNote');
+    const ultrasonicMessages={
+      idle:'',
+      running:'HC-SR04 phát hiện vật. Băng tải đang quay khoảng một vòng.',
+      finished:'Đã hết thời gian quay một vòng. Băng tải đã dừng.',
+      interrupted:'Chu kỳ HC-SR04 đã dừng sớm.'
+    };
+    const commandNames=['Dừng lái','Tiến','Lùi','Trái','Phải'];
+    const driveSpeed=document.getElementById('driveSpeed');
+    const beltSpeed=document.getElementById('beltSpeed');
+    function motorState(){
+      if(stopPending)return 'stop';
+      const drive=driveSpeed.value.padStart(3,'0');
+      const conveyor=beltSpeed.value.padStart(3,'0');
+      return `${direction}:${belt}:${drive}:${conveyor}`;
+    }
+    for(const slider of [driveSpeed,beltSpeed]){
+      slider.oninput=()=>{
+        document.getElementById(slider.id+'Value').textContent=slider.value+'%';
+        if(direction || belt)sendChangedState();
+      };
+    }
+    function showBeltState(){
+      document.getElementById('beltOn').setAttribute('aria-pressed',String(belt===1));
+      document.getElementById('beltReverse').setAttribute('aria-pressed',String(belt===2));
+    }
+    function sendChangedState(){
+      ++intentRevision;
+      send();
+    }
+    async function send(){
+      if(busy || clearing || document.hidden)return;
+      busy=true;
+      const state=motorState();
+      const requestRevision=intentRevision;
+      const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),500);
+      try{
+        const response=await fetch('/motor',{method:'POST',headers:{'X-Motor-Control':'1'},body:state,signal:controller.signal});
+        const cycle=response.headers.get('X-HC-SR04-Cycle');
+        if(requestRevision===intentRevision && cycle && Object.hasOwn(ultrasonicMessages,cycle)){
+          const message=ultrasonicMessages[cycle];
+          if(ultrasonicNote.textContent!==message)ultrasonicNote.textContent=message;
+        }
+        if(!response.ok)throw Error(await response.text());
+        if(state==='stop')stopPending=false;
+        if(requestRevision!==intentRevision)return;
+        if(state==='stop'){
+          lastError='';
+          note.textContent='Đã dừng tất cả.';
+          showBeltState();
+          return;
+        }
+        if(direction || belt)lastError='';
+        if(!lastError){
+          note.textContent=`ESP nhận: ${commandNames[driveSpeed.value==='0' ? 0 : Number(state[0])]} · Băng tải ${['tắt','bật','quay ngược'][beltSpeed.value==='0' ? 0 : Number(state[2])]}`;
+        }
+        showBeltState();
+      }catch(error){
+        // A failed older request must not cancel a more recent button press.
+        if(requestRevision!==intentRevision)return;
+        direction=0;belt=0;lastError=error.message;
+        showBeltState();
+        note.textContent=`Lệnh chưa thực hiện: ${error.message}. ESP dừng khi hết hạn lệnh 1 giây.`;
+      }finally{
+        clearTimeout(timer);busy=false;
+        if(requestRevision!==intentRevision || state!==motorState())send();
+      }
+    }
+    document.querySelectorAll('[data-move]').forEach(button=>{
+      button.style.touchAction='none';button.style.userSelect='none';
+      button.addEventListener('contextmenu',e=>e.preventDefault());
+      button.addEventListener('pointerdown',e=>{
+        e.preventDefault();button.setPointerCapture(e.pointerId);direction=Number(button.dataset.move);sendChangedState();
+      });
+      const release=()=>{if(direction===Number(button.dataset.move)){direction=0;sendChangedState();}};
+      ['pointerup','pointercancel','lostpointercapture'].forEach(event=>button.addEventListener(event,release));
+    });
+    function stop(){
+      direction=0;belt=0;stopPending=true;
+      sendChangedState();
+      if(document.hidden){
+        fetch('/motor',{method:'POST',headers:{'X-Motor-Control':'1'},body:'stop',keepalive:true}).catch(()=>{});
+      }
+    }
+    document.getElementById('driveStop').onclick=()=>{direction=0;sendChangedState();};
+    document.getElementById('beltOn').onclick=()=>{belt=1;sendChangedState();};
+    document.getElementById('beltReverse').onclick=()=>{belt=2;sendChangedState();};
+    document.getElementById('beltOff').onclick=()=>{belt=0;sendChangedState();};
+    document.getElementById('allStop').onclick=stop;
+    document.getElementById('clearMotorFault').onclick=async()=>{
+      if(clearing)return;
+      clearing=true;direction=0;belt=0;++intentRevision;
+      const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),2000);
+      try{
+        while(busy)await new Promise(resolve=>setTimeout(resolve,20));
+        const statusResponse=await fetch('/api/status',{cache:'no-store',signal:controller.signal});
+        if(!statusResponse.ok)throw Error(await statusResponse.text());
+        const status=await statusResponse.json();
+        const response=await fetch('/api/command',{
+          method:'POST',headers:{'Content-Type':'application/json','X-Boat-Key':status.key},
+          body:JSON.stringify({action:status.state==='FAULT'?'clear':'stop',epoch:status.epoch}),
+          signal:controller.signal
+        });
+        if(!response.ok)throw Error(await response.text());
+        lastError='';
+        showBeltState();
+        note.textContent='Đã dừng motor và xóa lỗi. Bấm nút để chạy lại.';
+      }catch(error){
+        lastError=error.message;
+        note.textContent=`Chưa xóa được lỗi: ${error.message}`;
+      }finally{
+        clearTimeout(timer);direction=0;belt=0;clearing=false;
+      }
+    };
+    document.getElementById('capture').onclick=async()=>{
+      try{
+        const response=await fetch('/capture?t='+Date.now(),{cache:'no-store'});
+        if(!response.ok)throw Error('Không chụp được ảnh');
+        const url=URL.createObjectURL(await response.blob()), link=document.createElement('a');
+        link.href=url;link.download=`esp32-${Date.now()}.jpg`;link.click();
+        setTimeout(()=>URL.revokeObjectURL(url),1000);
+      }catch(error){note.textContent=`Không lưu được ảnh: ${error.message}`;}
+    };
+    window.addEventListener('blur',stop);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});
+    window.addEventListener('pagehide',()=>{
+      direction=0;belt=0;++intentRevision;
+      fetch('/motor',{method:'POST',headers:{'X-Motor-Control':'1'},body:'stop',keepalive:true}).catch(()=>{});
+    });
+    setInterval(send,150);
+  })();
+  </script>
+
+  <script>
+    const img = document.getElementById('cam');
+    const framesize = document.getElementById('framesize');
+    const quality = document.getElementById('quality');
+    const qval = document.getElementById('qval');
+    const fps = document.getElementById('fps');
+    const marks = document.getElementById('marks');
+    const warped = document.getElementById('warped');
+    const hint = document.getElementById('hint');
+    const warpTitle = document.getElementById('warpTitle');
+    const calibButton = document.getElementById('calib');
+    const rewarpButton = document.getElementById('rewarp');
+    let streamRetry;
+    let frozenUrl = null;
+    let calibrating = false;
+    let clicks = [];
+    let savedPts = null;
+    function streamUrl() {
+      return location.protocol + '//' + location.hostname + ':81/stream?t=' + Date.now();
+    }
+    function stopStream() {
+      clearTimeout(streamRetry);
+      img.onload = null;
+      img.onerror = null;
+      img.removeAttribute('src');
+      if (frozenUrl) {
+        URL.revokeObjectURL(frozenUrl);
+        frozenUrl = null;
+      }
+    }
+    function restartStream() {
+      stopStream();
+      // Trinh duyet giai ma MJPEG truc tiep, khong thay Blob URL lien tuc.
+      fps.textContent = 'dang xem truc tiep';
+      img.onerror = () => {
+        fps.textContent = 'mat ket noi stream, dang thu lai...';
+        streamRetry = setTimeout(restartStream, 2000);
+      };
+      img.src = streamUrl();
+    }
+    window.addEventListener('pagehide', stopStream);
+    async function setControl(name, value) {
+      const res = await fetch('/control?var=' + name + '&val=' + value);
+      if (!res.ok) fps.textContent = 'khong doi duoc';
+    }
+    framesize.onchange = async () => {
+      await setControl('framesize', framesize.value);
+      restartStream();
+    };
+    let qualityTimer;
+    quality.oninput = () => {
+      qval.textContent = quality.value;
+      clearTimeout(qualityTimer);
+      qualityTimer = setTimeout(() => setControl('quality', quality.value), 200);
+    };
+    function drawMarks() {
+      const ctx = marks.getContext('2d');
+      ctx.clearRect(0, 0, marks.width, marks.height);
+      ctx.strokeStyle = '#fc4';
+      ctx.fillStyle = '#fc4';
+      ctx.lineWidth = Math.max(2, marks.width / 320);
+      if (clicks.length > 1) {
+        ctx.beginPath();
+        clicks.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        if (clicks.length === 4) ctx.closePath();
+        ctx.stroke();
+      }
+      clicks.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(4, marks.width / 160), 0, 6.28);
+        ctx.fill();
+        ctx.fillText(String(i + 1), p.x + 8, p.y - 8);
+      });
+    }
+    function homographyToQuad(p) {
+      const x0 = p[0].x, y0 = p[0].y, x1 = p[1].x, y1 = p[1].y;
+      const x2 = p[2].x, y2 = p[2].y, x3 = p[3].x, y3 = p[3].y;
+      const dx1 = x1 - x2, dy1 = y1 - y2, dx2 = x3 - x2, dy2 = y3 - y2;
+      const dx3 = x0 - x1 + x2 - x3, dy3 = y0 - y1 + y2 - y3;
+      const det = dx1 * dy2 - dx2 * dy1;
+      if (Math.abs(det) < 1e-6) return null;
+      const g = (dx3 * dy2 - dx2 * dy3) / det;
+      const h = (dx1 * dy3 - dx3 * dy1) / det;
+      return [x1 - x0 + g * x1, x3 - x0 + h * x3, x0, y1 - y0 + g * y1, y3 - y0 + h * y3, y0, g, h, 1];
+    }
+    function showWarped(points) {
+      const src = document.createElement('canvas');
+      src.width = img.naturalWidth;
+      src.height = img.naturalHeight;
+      const sctx = src.getContext('2d', {willReadFrequently: true});
+      sctx.drawImage(img, 0, 0);
+      const sw = src.width, sh = src.height;
+      const pix = sctx.getImageData(0, 0, sw, sh).data;
+      const edge = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+      let outW = Math.round((edge(points[0], points[1]) + edge(points[3], points[2])) / 2);
+      let outH = Math.round((edge(points[0], points[3]) + edge(points[1], points[2])) / 2);
+      const limit = 800;
+      const scale = Math.min(1, limit / Math.max(outW, outH));
+      outW = Math.max(16, Math.round(outW * scale));
+      outH = Math.max(16, Math.round(outH * scale));
+      const H = homographyToQuad(points);
+      if (!H) {
+        hint.textContent = '4 diem thang hang, chon lai';
+        return;
+      }
+      const out = sctx.createImageData(outW, outH);
+      const dst = out.data;
+      for (let y = 0; y < outH; y++) {
+        const v = outH === 1 ? 0 : y / (outH - 1);
+        for (let x = 0; x < outW; x++) {
+          const u = outW === 1 ? 0 : x / (outW - 1);
+          const w = H[6] * u + H[7] * v + H[8];
+          const sx = (H[0] * u + H[1] * v + H[2]) / w;
+          const sy = (H[3] * u + H[4] * v + H[5]) / w;
+          const o = (y * outW + x) * 4;
+          if (sx < 0 || sy < 0 || sx >= sw - 1 || sy >= sh - 1) {
+            dst[o + 3] = 255;
+            continue;
+          }
+          const x0 = Math.floor(sx), y0 = Math.floor(sy);
+          const fx = sx - x0, fy = sy - y0;
+          const i00 = (y0 * sw + x0) * 4;
+          const i10 = i00 + 4;
+          const i01 = i00 + sw * 4;
+          const i11 = i01 + 4;
+          for (let c = 0; c < 3; c++) {
+            const top = pix[i00 + c] * (1 - fx) + pix[i10 + c] * fx;
+            const bot = pix[i01 + c] * (1 - fx) + pix[i11 + c] * fx;
+            dst[o + c] = top * (1 - fy) + bot * fy;
+          }
+          dst[o + 3] = 255;
+        }
+      }
+      warped.width = outW;
+      warped.height = outH;
+      warped.getContext('2d').putImageData(out, 0, 0);
+      warped.style.display = 'block';
+      warpTitle.textContent = 'Anh sau hieu chinh ' + outW + 'x' + outH;
+    }
+    async function freezeFrame() {
+      stopStream();
+      fps.textContent = 'anh tinh';
+      const res = await fetch('/capture?t=' + Date.now(), {cache: 'no-store'});
+      if (!res.ok) throw new Error('capture');
+      const blob = await res.blob();
+      await new Promise((resolve, reject) => {
+        img.onload = () => {
+          img.onload = null;
+          img.onerror = null;
+          resolve();
+        };
+        img.onerror = () => {
+          img.onload = null;
+          img.onerror = null;
+          reject(new Error('image'));
+        };
+        frozenUrl = URL.createObjectURL(blob);
+        img.src = frozenUrl;
+      });
+      marks.width = img.naturalWidth;
+      marks.height = img.naturalHeight;
+      drawMarks();
+    }
+    function pointsToNormalized() {
+      return clicks.map(p => ({x: p.x / marks.width, y: p.y / marks.height}));
+    }
+    async function savePoints() {
+      const n = pointsToNormalized();
+      const body = n.map(p => p.x + ',' + p.y).join(',');
+      await fetch('/calibration', {method: 'POST', headers: {'Content-Type': 'text/plain', 'X-Motor-Control':'1'}, body});
+      savedPts = n;
+    }
+    calibButton.onclick = async () => {
+      calibrating = true;
+      clicks = [];
+      hint.textContent = 'Cham 4 goc theo chieu kim dong ho, bat dau tu tren trai.';
+      try {
+        await freezeFrame();
+      } catch (e) {
+        hint.textContent = 'Khong chup duoc anh';
+        calibrating = false;
+        restartStream();
+      }
+    };
+    marks.onclick = async (ev) => {
+      if (!calibrating || clicks.length >= 4) return;
+      const rect = marks.getBoundingClientRect();
+      clicks.push({
+        x: (ev.clientX - rect.left) * marks.width / rect.width,
+        y: (ev.clientY - rect.top) * marks.height / rect.height
+      });
+      drawMarks();
+      if (clicks.length < 4) {
+        hint.textContent = 'Da chon ' + clicks.length + '/4';
+        return;
+      }
+      calibrating = false;
+      hint.textContent = 'Dang nan anh...';
+      showWarped(clicks);
+      try { await savePoints(); } catch (e) { hint.textContent = 'Da nan anh, chua luu duoc diem'; }
+    };
+    rewarpButton.onclick = async () => {
+      if (!savedPts || savedPts.length !== 4) {
+        hint.textContent = 'Chua co 4 diem calib';
+        return;
+      }
+      try {
+        await freezeFrame();
+      } catch (e) {
+        hint.textContent = 'Khong chup duoc anh';
+        restartStream();
+        return;
+      }
+      clicks = savedPts.map(p => ({x: p.x * marks.width, y: p.y * marks.height}));
+      drawMarks();
+      showWarped(clicks);
+    };
+    quality.value = '20';
+    qval.textContent = '20';
+    fetch('/calibration').then(r => r.json()).then(data => {
+      if (data.ok && data.pts.length === 8) {
+        savedPts = [];
+        for (let i = 0; i < 8; i += 2) savedPts.push({x: data.pts[i], y: data.pts[i + 1]});
+      }
+    }).catch(() => {});
+    fetch('/status').then(r => r.json()).then(s => {
+      if ([...framesize.options].some(o => o.value === String(s.framesize))) {
+        framesize.value = String(s.framesize);
+      }
+      const beltSpeed = document.getElementById('beltSpeed');
+      beltSpeed.disabled = !s.conveyorPwm;
+      document.getElementById('beltSpeedHint').textContent = s.conveyorPwm ? '' : 'Jumper ENA · 100%';
+      quality.value = s.quality;
+      qval.textContent = s.quality;
+    }).catch(() => {
+      document.getElementById('beltSpeedHint').textContent = 'Chưa đọc được cấu hình PWM';
+    }).finally(restartStream);
+  </script>
+</body>
+</html>

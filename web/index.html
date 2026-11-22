@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#102e31">
+<title>Thuyền thu gom rác</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#edf3f1;color:#102e31;font:16px system-ui,sans-serif}
+main{max-width:1000px;margin:auto;padding:22px}header{display:flex;gap:16px;justify-content:space-between;align-items:center;margin-bottom:20px}
+h1{font-size:25px;margin:0 0 5px}p{line-height:1.5;margin:8px 0}small{color:#4d696b}.badge{border-radius:30px;padding:8px 12px;background:#d9e9e3;font-weight:700}
+.layout{display:grid;grid-template-columns:1.2fr 1fr;gap:18px}.card{padding:20px;background:white;border:1px solid #cbdcd5;border-radius:18px;margin-bottom:16px}
+.camera{position:relative;aspect-ratio:4/3;background:#102e31;border-radius:12px;overflow:hidden;display:grid;place-items:center;color:#e1ebe5}
+.camera img{width:100%;height:100%;object-fit:contain;position:absolute}.marker{position:absolute;width:22px;height:22px;border:3px solid #ffdd65;border-radius:50%;transform:translate(-50%,-50%);display:none;box-shadow:0 0 0 2px #102e31}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}button,a.button{font:inherit;padding:12px 15px;border:1px solid #c3d6cc;border-radius:10px;background:#f1f6f3;color:#123b35;cursor:pointer;text-decoration:none;touch-action:none;user-select:none}
+button:disabled{opacity:.45;cursor:not-allowed}button:active:not(:disabled){background:#cae6d8}.primary{background:#12614d;color:white}.stop{background:#b22e36!important;color:white!important;border:0!important;font-weight:800;min-height:56px;width:100%;font-size:20px}
+button[aria-pressed=true]{background:#12614d;color:#fff;border-color:#12614d}.section-label{font-weight:700;margin-top:20px}.led-dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:#b6c6be;margin-right:6px}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0}.pad button{height:58px}.pad .forward{grid-column:2}.pad .back{grid-column:2}.wide{width:100%}
+.metrics{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.metrics strong{font-size:22px;display:block}.notice{padding:10px 12px;border-radius:8px;background:#fff1cc;font-size:14px;margin:12px 0}
+label{display:block;margin-top:15px}input[type=range]{width:100%;accent-color:#12614d}.muted{font-size:14px;color:#4d696b}#message{min-height:26px;color:#a02028}details{margin-top:14px}summary{cursor:pointer}
+@media(max-width:700px){main{padding:14px}.layout{grid-template-columns:1fr}header{align-items:flex-start}h1{font-size:21px}.card{padding:16px}}
+</style>
+</head><body><main>
+<header><div><h1>Thuyền thu gom rác</h1><small>GOOUUU ESP32-S3 · OV2640</small></div><span class="badge" id="connection">Đang kết nối</span></header>
+<div class="layout"><section>
+<div class="card"><div class="camera"><span id="cameraNote">Đang chờ camera…</span><img id="camera" alt="Hình ảnh phía trước thuyền" hidden><span class="marker" id="marker"></span></div>
+<div class="row"><button id="preview">Tắt stream</button><button id="capture">Lưu ảnh</button></div>
+<p class="muted" id="detector">Đang đọc cấu hình…</p><p class="muted">Dấu tròn biểu thị quan sát gần nhất; hình xem trước có thể thuộc khung hình khác.</p></div>
+<div class="card"><div class="metrics"><div><small>Trạng thái</small><strong id="state">—</strong></div><div><small>Điện áp pin</small><strong id="battery">—</strong></div><div><small>Chu kỳ thu đã chạy</small><strong id="cycles">0</strong></div><div><small>Xử lý một ảnh</small><strong id="latency">—</strong></div></div>
+<p class="muted">Chu kỳ thu không phải số vật đã xác nhận vào giỏ.</p><details><summary>Chi tiết hoạt động</summary><p id="detail" class="muted"></p></details></div>
+</section><section class="controls"><div class="card">
+<button class="stop" id="stop">DỪNG TẤT CẢ</button><p id="message" role="status" aria-live="polite"></p>
+<div class="notice" id="mode">Đang đọc chế độ đầu ra…</div>
+<div class="row"><button id="manual" disabled>Điều khiển thủ công</button><button id="auto" disabled>Tự động một lượt</button><button id="clear" disabled>Xóa lỗi</button></div>
+<label for="speed">Tốc độ: <b id="speedText">35%</b></label><input id="speed" type="range" min="15" max="70" value="35">
+<div class="pad"><button class="forward" data-drive="forward" disabled>▲ Tiến</button><button data-drive="left" disabled>◀ Trái</button><button id="neutral" disabled>Dừng lái</button><button data-drive="right" disabled>Phải ▶</button><button class="back" data-drive="back" disabled>▼ Lùi</button></div>
+<p class="section-label">Băng tải · <span id="conveyorState">Đang tắt</span></p>
+<div class="row"><button id="conveyorOn" aria-pressed="false" disabled>Bật băng tải</button><button id="conveyorOff" disabled>Tắt băng tải</button></div>
+<p class="muted">Giữ nút hướng để lái, thả để dừng lái. Băng tải giữ trạng thái bật đến khi bạn tắt, dừng tất cả hoặc mất lệnh.</p>
+<p class="muted" id="conveyorMode"></p>
+<p class="muted">Rời trang hoặc mất lệnh quá 1 giây sẽ dừng động cơ và băng tải.</p>
+</div><div class="card">
+<p class="section-label" style="margin-top:0">Điều khiển LED</p><p class="muted">Có thể thử đèn khi thuyền đang dừng. LED hoạt động thật cả trong bản thử trên bàn.</p>
+<button id="redLed" class="wide" aria-pressed="false" disabled><span class="led-dot" id="redDot"></span><span id="redText">Bật LED đỏ ngoài</span></button>
+<p class="muted">LED ngoài: GPIO40 → 220–330 Ω → LED → GND.</p>
+<p class="section-label">LED RGB trên board</p>
+<div class="row" id="rgbButtons"><button data-rgb="off" disabled>Tắt</button><button data-rgb="red" disabled>Đỏ</button><button data-rgb="yellow" disabled>Vàng</button><button data-rgb="blue" disabled>Xanh dương</button><button data-rgb="green" disabled>Xanh lá</button><button data-rgb="white" disabled>Trắng</button></div>
+<p class="muted" id="ledMessage" role="status" aria-live="polite"></p>
+</div></section></div>
+</main><script>/*__CONTROL_JS__*/</script></body></html>
